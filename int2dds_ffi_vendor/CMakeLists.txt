@@ -22,7 +22,7 @@ find_package(ament_cmake REQUIRED)
 #   and installs it as include/ + lib/.
 # ============================================================================
 
-set(INT2DDS_FFI_VERSION "0.1.4")
+set(INT2DDS_FFI_VERSION "0.1.5")
 set(INT2DDS_FFI_RELEASE_TAG "v${INT2DDS_FFI_VERSION}")
 set(INT2DDS_FFI_BASE_URL
   "https://github.com/IntellectusCorp/int2dds_ffi_vendor/releases/download/${INT2DDS_FFI_RELEASE_TAG}")
