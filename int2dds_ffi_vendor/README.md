@@ -55,12 +55,12 @@ int2dds-ffi-<version>-linux.tar.gz
 
 ```yaml
 name: int2dds-ffi
-version: 0.1.4
+version: 0.1.5
 artifacts:
   - os: linux
     arch: amd64
     triple: x86_64-unknown-linux-gnu
-    file: linux-x86_64/libint2dds_ffi.so.0.1.4
+    file: linux-x86_64/libint2dds_ffi.so.0.1.5
     soname: libint2dds_ffi.so.0
     sha256: <hex>
     min_glibc: "2.28"
@@ -93,7 +93,7 @@ normally the one the int2DDS tree just produced:
 
 ```bash
 colcon build --cmake-args \
-  -DINT2DDS_FFI_TARBALL=/path/to/int2DDS/ffi/dist/int2dds-ffi-0.1.4-linux.tar.gz
+  -DINT2DDS_FFI_TARBALL=/path/to/int2DDS/ffi/dist/int2dds-ffi-0.1.5-linux.tar.gz
 ```
 
 Two reasons to reach for it. The obvious one is offline builds. The other is
