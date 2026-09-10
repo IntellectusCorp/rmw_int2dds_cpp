@@ -2,6 +2,13 @@
 Changelog for package int2dds_ffi_vendor
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.1.5 (2026-09-10)
+------------------
+* Vendor the int2DDS FFI 0.1.5 release assets in place of 0.1.4. The libraries
+  are a fresh build, so the sha256 of every artifact moved.
+* The soname is unchanged at ``libint2dds_ffi.so.0``.
+* Contributors: Intellectus Corp.
+
 0.1.4 (2026-09-04)
 ------------------
 * Vendor the int2DDS FFI 0.1.4 release assets in place of 0.1.3. The C API is
