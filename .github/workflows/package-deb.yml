@@ -1,4 +1,4 @@
-# Build per-architecture .deb packages for the int2DDS RMW stack (this branch = humble).
+# Build per-architecture .deb packages for the int2DDS RMW stack (this branch = foxy).
 # Each version branch (jazzy/humble/rolling) carries its own copy of this workflow with
 # ROS_DISTRO set to that branch's distro. amd64 and arm64 are built and verified
 # (official ros:<distro>-ros-base images ship for those two architectures).
@@ -10,7 +10,7 @@ name: package-deb
 
 on:
   pull_request:
-    branches: [humble]
+    branches: [foxy]
     paths:
       - 'packaging/**'
       - '.github/workflows/package-deb.yml'
@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
 
 env:
-  ROS_DISTRO: humble
+  ROS_DISTRO: foxy
 
 jobs:
   build:

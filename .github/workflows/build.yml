@@ -1,4 +1,4 @@
-# Build + test the int2DDS RMW stack (this branch = humble). Each version branch
+# Build + test the int2DDS RMW stack (this branch = foxy). Each version branch
 # (jazzy/humble/rolling) carries its own copy of this workflow pinned to that
 # branch's distro, the same convention package-deb.yml and lint.yml follow: the
 # branches carry distro-specific sources, so building one branch against another
@@ -15,18 +15,16 @@ name: build
 
 on:
   push:
-    branches: [humble]
+    branches: [foxy]
   pull_request:
-    branches: [humble]
+    branches: [foxy]
   workflow_dispatch:
 
 jobs:
   build-test:
     runs-on: ubuntu-22.04
-    # The image exports ROS_DISTRO=humble, which rmw_int2dds_cpp/CMakeLists.txt
-    # reads to keep the matched-event smoke target off on Humble.
     container:
-      image: ros:humble-ros-base
+      image: ros:foxy-ros-base
     steps:
       - uses: actions/checkout@v4
 
@@ -34,10 +32,10 @@ jobs:
         uses: ros-tooling/action-ros-ci@master
         with:
           package-name: int2dds_ffi_vendor rmw_int2dds_cpp rmw_int2dds_validation
-          target-ros2-distro: humble
+          target-ros2-distro: foxy
           # The action runs `colcon lcov-result` / `colcon coveragepy-result`
           # after the build, but colcon-lcov-result and colcon-coveragepy-result
-          # are not part of the ros:humble-ros-base image, so those verbs abort
+          # are not part of the ros:foxy-ros-base image, so those verbs abort
           # the step with exit 2 even when the build and every test pass. No
           # coverage target is tracked for this package (see
           # QUALITY_DECLARATION.md), so skip the coverage stage entirely rather
@@ -48,6 +46,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-humble
+          name: test-results-foxy
           path: ros_ws/build/rmw_int2dds_cpp/test_results/
           if-no-files-found: ignore

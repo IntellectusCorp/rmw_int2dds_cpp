@@ -7,19 +7,24 @@
 # support them, and they are build-coupled, so they run inside `colcon test`
 # (via ament_lint_common) in build.yml instead. Do not duplicate them here.
 #
-# Pinned to this branch's distro (humble), like build.yml and package-deb.yml.
+# Pinned to this branch's distro (foxy), like build.yml and package-deb.yml.
+# No current GitHub runner image can install Foxy for setup-ros, and
+# action-ros-lint needs sudo, which ros:foxy-ros-base lacks, so the job runs in
+# that container and installs and runs the linter itself.
 name: lint
 
 on:
   push:
-    branches: [humble]
+    branches: [foxy]
   pull_request:
-    branches: [humble]
+    branches: [foxy]
   workflow_dispatch:
 
 jobs:
   ament_lint:
     runs-on: ubuntu-22.04
+    container:
+      image: ros:foxy-ros-base
     strategy:
       fail-fast: false
       matrix:
@@ -29,11 +34,13 @@ jobs:
         linter: [xmllint]
     steps:
       - uses: actions/checkout@v4
-      - uses: ros-tooling/setup-ros@v0.7
-      - uses: ros-tooling/action-ros-lint@v0.1
-        with:
-          linter: ${{ matrix.linter }}
-          distribution: humble
-          # Every package in this repository. action-ros-lint takes a
-          # whitespace-separated list, same as build.yml.
-          package-name: int2dds_ffi_vendor rmw_int2dds_cpp rmw_int2dds_validation
+      - run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --quiet --yes \
+            "ros-foxy-ament-$(echo '${{ matrix.linter }}' | tr '_' '-')"
+      - shell: bash
+        # Every package in this repository, same list as build.yml.
+        run: |
+          source /opt/ros/foxy/setup.bash
+          ament_${{ matrix.linter }} $(colcon list -p --packages-select \
+            int2dds_ffi_vendor rmw_int2dds_cpp rmw_int2dds_validation)

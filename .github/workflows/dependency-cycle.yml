@@ -2,14 +2,14 @@
 # generation for the whole distro and is invisible to colcon, which only orders
 # the workspace. See testing/check-dependency-cycle.py.
 #
-# Pinned to this branch's distro (humble), like build.yml and lint.yml.
+# Pinned to this branch's distro (foxy), like build.yml and lint.yml.
 name: dependency-cycle
 
 on:
   push:
-    branches: [humble]
+    branches: [foxy]
   pull_request:
-    branches: [humble]
+    branches: [foxy]
   workflow_dispatch:
 
 jobs:
@@ -17,9 +17,9 @@ jobs:
     runs-on: ubuntu-22.04
     # catkin_pkg and PyYAML ship with the image; nothing here needs building.
     container:
-      image: ros:humble-ros-base
+      image: ros:foxy-ros-base
     steps:
       - uses: actions/checkout@v4
       # The distro is passed explicitly: a pull request checkout is detached, so
       # the script cannot read it from the branch name.
-      - run: python3 testing/check-dependency-cycle.py humble
+      - run: python3 testing/check-dependency-cycle.py foxy
