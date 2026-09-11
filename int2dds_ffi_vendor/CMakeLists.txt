@@ -98,7 +98,16 @@ endif()
 
 file(REMOVE_RECURSE "${_extract_dir}")
 file(MAKE_DIRECTORY "${_extract_dir}")
-file(ARCHIVE_EXTRACT INPUT "${_tarball}" DESTINATION "${_extract_dir}")
+# file(ARCHIVE_EXTRACT) needs CMake 3.18, but Foxy targets Ubuntu 20.04 whose
+# CMake is 3.16. `cmake -E tar xf` detects .tar.gz/.zip by content and keeps the
+# SONAME symlink chain intact.
+execute_process(
+  COMMAND ${CMAKE_COMMAND} -E tar xf "${_tarball}"
+  WORKING_DIRECTORY "${_extract_dir}"
+  RESULT_VARIABLE _extract_result)
+if(NOT _extract_result EQUAL 0)
+  message(FATAL_ERROR "int2dds_ffi_vendor: failed to extract ${_asset} (${_extract_result})")
+endif()
 
 set(_header "${_extract_dir}/int2dds-ffi.h")
 set(_lib "${_extract_dir}/${_member}")
