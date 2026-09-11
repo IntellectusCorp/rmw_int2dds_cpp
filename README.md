@@ -21,6 +21,7 @@ int2DDS as its middleware via `RMW_IMPLEMENTATION=rmw_int2dds_cpp`.
 
 | Distribution | Status |
 |--------------|--------|
+| Foxy Fitzroy (LTS)     | Supported (verified) |
 | Humble Hawksbill (LTS) | Supported (verified) |
 | Jazzy Jalisco (LTS)    | Supported (verified) |
 | Lyrical Luth (LTS)     | Supported (verified) |
@@ -37,11 +38,11 @@ int2DDS as its middleware via `RMW_IMPLEMENTATION=rmw_int2dds_cpp`.
 ```bash
 # 1) Get the sources into your ROS 2 workspace
 mkdir -p ~/ros2_ws/src && cd ~/ros2_ws/src
-git clone -b humble https://github.com/IntellectusCorp/rmw_int2dds.git
+git clone -b foxy https://github.com/IntellectusCorp/rmw_int2dds.git
 
 # 2) Build
 cd ~/ros2_ws
-source /opt/ros/humble/setup.bash
+source /opt/ros/foxy/setup.bash
 colcon build --packages-up-to rmw_int2dds_cpp
 source install/setup.bash
 
@@ -61,16 +62,16 @@ distro + architecture from the
 [Releases](https://github.com/IntellectusCorp/rmw_int2dds/releases) page, then:
 
 ```bash
-sudo apt install ./ros-humble-int2dds-ffi-vendor_*_amd64.deb \
-                 ./ros-humble-rmw-int2dds-cpp_*_amd64.deb
-source /opt/ros/humble/setup.bash
+sudo apt install ./ros-foxy-int2dds-ffi-vendor_*_amd64.deb \
+                 ./ros-foxy-rmw-int2dds-cpp_*_amd64.deb
+source /opt/ros/foxy/setup.bash
 export RMW_IMPLEMENTATION=rmw_int2dds_cpp
 ros2 run demo_nodes_cpp talker
 ```
 
 `apt install ./file.deb` installs the file and resolves its dependencies (the rmw
 package pulls in the vendor package automatically). The RMW library and its
-ament-index marker install into `/opt/ros/humble/`, so once the environment is
+ament-index marker install into `/opt/ros/foxy/`, so once the environment is
 sourced only `RMW_IMPLEMENTATION` needs to be set.
 
 Supported: **jazzy / humble / rolling** × **amd64 / arm64**.
@@ -111,19 +112,19 @@ All results below were produced by running the listed suites directly; see
 `doc/` for methodology. Same-vendor and cross-vendor integration tests use the
 official ROS 2 repositories (`rmw_implementation`, `system_tests`).
 
-| Suite | Lyrical | Jazzy | Humble |
-|---|---|---|---|
-| `test_rmw_implementation` (RMW conformance gate) | 16/16 | 16/16 | 15/15 |
-| `test_communication` same-RMW | 34/34 | 30/30 | 29/29 |
-| `test_quality_of_service` | 4/4 | 4/4 | 3/3 |
-| `test_rclcpp` | 25/25 | 25/25 | 25/25 |
-| Cross-vendor vs `rmw_fastrtps_cpp` | 8/8 | 8/8 | 8/8 |
-| Cross-vendor vs `rmw_cyclonedds_cpp` | 8/8 excluding `WStrings` (see Known issues) | 8/8 | 8/8 |
-| `test_cli_remapping` | 1/1 | 1/1 | 1/1 |
-| `test_security` | 6/6 | 6/6 | 6/6 |
-| In-repo QoS check scripts | 6/6 | 6/6 | 6/6 |
-| `rosdoc2 build` | pass | pass | pass |
-| `ament_lint` suite | 162 tests, 0 failures, 42 skipped | 162 tests, 0 failures, 42 skipped | 154 tests, 0 failures, 40 skipped |
+| Suite | Lyrical | Jazzy | Humble | Foxy |
+|---|---|---|---|---|
+| `test_rmw_implementation` (RMW conformance gate) | 16/16 | 16/16 | 15/15 | 13/13 |
+| `test_communication` same-RMW | 34/34 | 30/30 | 29/29 | 28/28 |
+| `test_quality_of_service` | 4/4 | 4/4 | 3/3 | n/a (not registered upstream) |
+| `test_rclcpp` | 25/25 | 25/25 | 25/25 | 23/23 |
+| Cross-vendor vs `rmw_fastrtps_cpp` | 8/8 | 8/8 | 8/8 | 8/8 |
+| Cross-vendor vs `rmw_cyclonedds_cpp` | 8/8 excluding `WStrings` (see Known issues) | 8/8 | 8/8 | 8/8 |
+| `test_cli_remapping` | 1/1 | 1/1 | 1/1 | 1/1 |
+| `test_security` | 6/6 | 6/6 | 6/6 | 6/6 |
+| In-repo QoS check scripts | 6/6 | 6/6 | 6/6 | 6/6 |
+| `rosdoc2 build` | pass | pass | pass | pass |
+| `ament_lint` suite | 162 tests, 0 failures, 42 skipped | 162 tests, 0 failures, 42 skipped | 154 tests, 0 failures, 40 skipped | 154 tests, 0 failures, 0 skipped |
 
 Cross-vendor scope: the upstream suite skips service/action combinations for
 **all** vendor pairs on every distro, so the cross-vendor rows cover the 8
@@ -133,21 +134,28 @@ Counting notes (the full run/skip/fail decomposition of every cell was
 verified against the per-test xunit/gtest XML results):
 
 - Totals differ across columns only where the upstream suite itself differs by
-  distro version (keyed-type tests, `test_event`, `best_available` QoS), never
-  because a test was dropped.
-- `test_rclcpp`: 25 is the actually-run count on all three distros; the raw
+  distro version (keyed-type tests, `test_event`, `best_available` QoS, and
+  Foxy's older suites), never because a test was dropped. Foxy's
+  `test_quality_of_service` only builds its test programs
+  (`ament_add_gtest_executable`) and registers no ctest tests, hence n/a; QoS
+  itself is supported on Foxy and is covered there by the in-repo QoS check
+  scripts.
+- `test_rclcpp`: 25 (23 on Foxy) is the actually-run count; the raw
   ctest entry count adds (installed RMW vendors − 1) × 2 upstream-skipped
   cross-RMW `node_name` variants, so it varies by environment.
 - Upstream-skipped cases inside otherwise-run suites (6 loaned-message /
   allocator cases in the Lyrical gate, 5 in Jazzy) are counted in ctest's
   headline totals even though they do not run.
 - `ament_lint`: the count is the eight linters' combined xunit testcase total
-  (162 on Lyrical and Jazzy, 154 on Humble); running `colcon test-result` over
-  the whole build directory prints 8 more (170 / 162) because it also sums the
+  (162 on Lyrical and Jazzy, 154 on Humble and Foxy); running `colcon test-result`
+  over the whole build directory prints 8 more (170 / 162) because it also sums the
   ctest summary file that wraps those same eight linters. The skips (42 on
   Lyrical and Jazzy, 40 on Humble) are ament_cppcheck's performance guard for
   cppcheck 2.x (set `AMENT_CPPCHECK_ALLOW_SLOW_VERSIONS=1` to run it). The same
-  guard skips the cppcheck entry in `test_security`.
+  guard skips the cppcheck entry in `test_security`. Foxy's ament_cppcheck has no
+  such guard (Ubuntu 20.04 ships cppcheck 1.90), so nothing is skipped there.
+- Foxy's `rosdoc2 build` ran with rosdoc2 in a Python 3.10 environment and
+  doxygen 1.9.8.
 
 ## Known issues
 
