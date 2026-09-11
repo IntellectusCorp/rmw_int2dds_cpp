@@ -445,7 +445,7 @@ static void sync_remote_participant_enclaves(rmw_int2dds_cpp::ContextData * cont
 // ContextData::synced_remote_entities so endpoints that have departed are removed.
 // Local endpoints are registered separately by the create/destroy hooks; the
 // ros_discovery_info topic itself is skipped.
-static void sync_remote_entities_to_common(rmw_int2dds_cpp::ContextData * context_data)
+static void bootstrap_remote_entities(rmw_int2dds_cpp::ContextData * context_data)
 {
   if (context_data == nullptr || !context_data->common) {
     return;
@@ -638,6 +638,50 @@ static void sync_remote_entities_to_common(rmw_int2dds_cpp::ContextData * contex
       gid, entry.second.topic_name, entry.second.type_name,
       participant_gid, entry.second.qos, entry.second.is_reader);
     synced[entry.first] = entry.second.is_reader;
+  }
+}
+
+// Per-query graph reconcile (lightweight). Endpoint arrivals are mirrored into the GraphCache
+// incrementally by the SEDP push callback (rmw_int2dds_endpoint_discovery_cb), and the full ALIVE
+// snapshot is seeded once at bootstrap (bootstrap_remote_entities), so a graph query no longer
+// pulls the O(N) ALIVE snapshot on every call -- that pull dominated graph-query latency. What a
+// query still does is prune departures the callback may have missed: a cheap pass (the NOT_ALIVE
+// snapshot is normally empty) that keeps stale endpoints from lingering, with no background thread
+// and no periodic timer.
+static void sync_remote_entities_to_common(rmw_int2dds_cpp::ContextData * context_data)
+{
+  if (context_data == nullptr || !context_data->common) {
+    return;
+  }
+
+  std::vector<std::pair<std::array<uint8_t, 16>, bool>> gone;
+  for (const auto & guid : collect_departed_publications(
+      context_data, static_cast<int>(kGraphSnapshotTimeout.count())))
+  {
+    gone.emplace_back(guid, false);
+  }
+  for (const auto & guid : collect_departed_subscriptions(
+      context_data, static_cast<int>(kGraphSnapshotTimeout.count())))
+  {
+    gone.emplace_back(guid, true);
+  }
+  if (gone.empty()) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(context_data->remote_sync_mutex);
+  auto & synced = context_data->synced_remote_entities;
+  for (const auto & departed : gone) {
+    std::array<uint8_t, RMW_GID_STORAGE_SIZE> key = {};
+    std::memcpy(key.data(), departed.first.data(), departed.first.size());
+    auto it = synced.find(key);
+    if (it == synced.end()) {
+      continue;
+    }
+    rmw_gid_t gid = {};
+    std::memcpy(gid.data, key.data(), RMW_GID_STORAGE_SIZE);
+    context_data->common->graph_cache.remove_entity(gid, departed.second);
+    synced.erase(it);
   }
 }
 
@@ -849,7 +893,7 @@ void enable_endpoint_push(ContextData * context_data)
   // Bootstrap: seed endpoints discovered before the callback was registered.
   // The dedup against synced_remote_entities makes this idempotent with the
   // callback, so the ordering register-then-seed loses nothing.
-  ::sync_remote_entities_to_common(context_data);
+  ::bootstrap_remote_entities(context_data);
 }
 
 void disable_endpoint_push(ContextData * context_data)
