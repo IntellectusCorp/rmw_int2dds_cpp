@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail if this checkout's packages would close a dependency cycle in a distro.
 
-Usage: testing/check-dependency-cycle.py [<humble|jazzy|lyrical|rolling>]
+Usage: testing/check-dependency-cycle.py [<foxy|humble|jazzy|lyrical|rolling>]
 
 With no argument the distro is taken from the current branch name, since each
 version branch of this repository carries the package.xml for exactly one
@@ -61,7 +61,7 @@ except ImportError:  # pragma: no cover - environment problem, not a test failur
 
 INDEX_URL = 'https://raw.githubusercontent.com/ros/rosdistro/master/index-v4.yaml'
 DISTRIBUTION_URL = 'https://raw.githubusercontent.com/ros/rosdistro/master/%s/distribution.yaml'
-DISTROS = ['humble', 'jazzy', 'lyrical', 'rolling']
+DISTROS = ['foxy', 'humble', 'jazzy', 'lyrical', 'rolling']
 # Only so repeated runs over several distros do not refetch ~300 KB each.
 DEFAULT_CACHE_DIR = os.path.join(
     os.environ.get('TMPDIR', '/tmp'), 'rmw_int2dds_rosdistro_cache')

@@ -2,7 +2,7 @@
 # Host-side launcher: run the full RMW test matrix for one distro inside a
 # matching ros:<distro>-ros-base container.
 #
-# Usage: testing/run-suite.sh <humble|jazzy|lyrical|rolling>
+# Usage: testing/run-suite.sh <foxy|humble|jazzy|lyrical|rolling>
 #
 # Source selection: a local branch named after the distro wins over
 # origin/<distro>, so a checkout carrying unpushed work is what gets tested.
@@ -12,10 +12,10 @@
 #   RMW_TEST_WORKDIR  parent of the per-distro work tree (default /tmp/rmw_int2dds_test)
 set -euo pipefail
 
-DISTRO="${1:?usage: run-suite.sh <humble|jazzy|lyrical|rolling>}"
+DISTRO="${1:?usage: run-suite.sh <foxy|humble|jazzy|lyrical|rolling>}"
 case "${DISTRO}" in
-  humble|jazzy|lyrical|rolling) ;;
-  *) echo "unknown distro '${DISTRO}' (expected humble|jazzy|lyrical|rolling)" >&2; exit 1 ;;
+  foxy|humble|jazzy|lyrical|rolling) ;;
+  *) echo "unknown distro '${DISTRO}' (expected foxy|humble|jazzy|lyrical|rolling)" >&2; exit 1 ;;
 esac
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"

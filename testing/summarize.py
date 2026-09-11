@@ -16,7 +16,7 @@ import re
 import sys
 from collections import defaultdict
 
-DISTROS = ["humble", "jazzy", "lyrical", "rolling"]
+DISTROS = ["foxy", "humble", "jazzy", "lyrical", "rolling"]
 LINE = re.compile(
     r"^(?P<path>\S+\.xml): (?P<tests>\d+) tests?, (?P<errors>\d+) errors?, "
     r"(?P<failures>\d+) failures?, (?P<skipped>\d+) skipped"
