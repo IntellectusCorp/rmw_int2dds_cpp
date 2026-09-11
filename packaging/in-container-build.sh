@@ -23,7 +23,9 @@ sed "s/@ROS_DISTRO@/${ROS_DISTRO}/g" \
   "${RMW_REPO}/packaging/rosdep/int2dds.yaml.in" > /tmp/int2dds-rosdep.yaml
 echo "yaml file:///tmp/int2dds-rosdep.yaml" \
   > /etc/ros/rosdep/sources.list.d/50-int2dds.list
-rosdep update
+# Foxy is end-of-life, and a plain `rosdep update` drops EOL distros, which
+# would leave every ros-foxy-* key unresolvable for bloom and rosdep install.
+rosdep update --include-eol-distros
 echo "::endgroup::"
 
 mkdir -p "${OUT}"

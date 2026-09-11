@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Verify a built deb set installs cleanly on a fresh container and the RMW loads.
-# Usage: packaging/verify-deb.sh <jazzy|humble|rolling> <amd64|arm64>
+# Usage: packaging/verify-deb.sh <foxy|jazzy|humble|rolling> <amd64|arm64>
 set -euo pipefail
 
-DISTRO="${1:?usage: verify-deb.sh <jazzy|humble|rolling> <amd64|arm64>}"
-ARCH="${2:?usage: verify-deb.sh <jazzy|humble|rolling> <amd64|arm64>}"
+DISTRO="${1:?usage: verify-deb.sh <foxy|jazzy|humble|rolling> <amd64|arm64>}"
+ARCH="${2:?usage: verify-deb.sh <foxy|jazzy|humble|rolling> <amd64|arm64>}"
 case "${ARCH}" in
   amd64) PLATFORM=linux/amd64 ;;
   arm64) PLATFORM=linux/arm64 ;;
