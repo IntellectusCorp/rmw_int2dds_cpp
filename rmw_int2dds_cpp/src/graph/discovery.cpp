@@ -38,7 +38,7 @@
 #include "rmw_dds_common/gid_utils.hpp"
 #include "rmw_dds_common/msg/participant_entities_info.hpp"
 
-#include "int2dds-ffi.h"  // NOLINT(build/include_subdir): vendored FFI header
+#include "int2dds-ffi.h"  // NOLINT(build/include): vendored FFI header
 
 #include "rmw_int2dds_cpp/types.hpp"
 #include "../common/type_hash_qos.hpp"

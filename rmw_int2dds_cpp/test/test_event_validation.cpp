@@ -10,7 +10,14 @@
 
 #include "rmw/event.h"
 #include "rmw/error_handling.h"
+#if __has_include("rmw/events_statuses/events_statuses.h")
 #include "rmw/events_statuses/events_statuses.h"
+#else
+// Foxy: liveliness/deadline statuses live in rmw/types.h, the
+// incompatible-QoS ones in rmw/incompatible_qos_events_statuses.h.
+#include "rmw/incompatible_qos_events_statuses.h"
+#include "rmw/types.h"
+#endif
 #include "rmw/init.h"
 #include "rmw/init_options.h"
 #include "rmw/publisher_options.h"
@@ -28,6 +35,20 @@
 #define RMW_INT2DDS_HAS_MATCHED_EVENT_API 1
 #else
 #define RMW_INT2DDS_HAS_MATCHED_EVENT_API 0
+#endif
+
+// RMW_EVENT_MESSAGE_LOST and rmw_event_set_callback are Humble additions;
+// Foxy has neither.
+#if __has_include("rmw/events_statuses/message_lost.h")
+#define RMW_INT2DDS_HAS_MESSAGE_LOST_EVENT_API 1
+#else
+#define RMW_INT2DDS_HAS_MESSAGE_LOST_EVENT_API 0
+#endif
+
+#if __has_include("rmw/event_callback_type.h")
+#define RMW_INT2DDS_HAS_EVENT_CALLBACK_API 1
+#else
+#define RMW_INT2DDS_HAS_EVENT_CALLBACK_API 0
 #endif
 
 #if __has_include("rmw/events_statuses/incompatible_type.h")
@@ -92,12 +113,14 @@ ignore_ret(rmw_ret_t ret)
   (void)ret;
 }
 
+#if RMW_INT2DDS_HAS_EVENT_CALLBACK_API
 void
 noop_event_callback(const void * user_data, size_t number_of_events)
 {
   (void)user_data;
   (void)number_of_events;
 }
+#endif
 
 struct TestContext
 {
@@ -148,6 +171,20 @@ cleanup_context(TestContext & ctx)
   }
 }
 
+rmw_node_t *
+create_node(TestContext & ctx, const char * name)
+{
+#if __has_include("rmw/get_network_flow_endpoints.h")
+  return rmw_create_node(&ctx.context, name, "/");
+#else
+  // Foxy still passes the node's domain id and localhost flag; hand over the
+  // values the context was initialized with (the default domain is 0).
+  const size_t domain_id = ctx.init_options.domain_id == RMW_DEFAULT_DOMAIN_ID ?
+    0u : ctx.init_options.domain_id;
+  return rmw_create_node(&ctx.context, name, "/", domain_id, false);
+#endif
+}
+
 bool
 init_context(TestContext & ctx, const char * publisher_node_name, const char * subscription_node_name)
 {
@@ -167,14 +204,14 @@ init_context(TestContext & ctx, const char * publisher_node_name, const char * s
     return false;
   }
 
-  ctx.publisher_node = rmw_create_node(&ctx.context, publisher_node_name, "/");
+  ctx.publisher_node = create_node(ctx, publisher_node_name);
   if (ctx.publisher_node == nullptr) {
     print_error_and_return("rmw_create_node(publisher)");
     cleanup_context(ctx);
     return false;
   }
 
-  ctx.subscription_node = rmw_create_node(&ctx.context, subscription_node_name, "/");
+  ctx.subscription_node = create_node(ctx, subscription_node_name);
   if (ctx.subscription_node == nullptr) {
     print_error_and_return("rmw_create_node(subscription)");
     cleanup_context(ctx);
@@ -454,7 +491,9 @@ test_init_and_callback_smoke()
     RMW_EVENT_REQUESTED_DEADLINE_MISSED,
     RMW_EVENT_REQUESTED_QOS_INCOMPATIBLE,
     RMW_EVENT_LIVELINESS_CHANGED,
+#if RMW_INT2DDS_HAS_MESSAGE_LOST_EVENT_API
     RMW_EVENT_MESSAGE_LOST,
+#endif
   };
 
   for (rmw_event_type_t event_type : publisher_events) {
@@ -463,6 +502,7 @@ test_init_and_callback_smoke()
       cleanup_context(ctx);
       return false;
     }
+#if RMW_INT2DDS_HAS_EVENT_CALLBACK_API
     if (!check_ret(
         rmw_event_set_callback(&event, noop_event_callback, reinterpret_cast<const void *>(0x1)),
         "rmw_event_set_callback(publisher)"))
@@ -474,6 +514,7 @@ test_init_and_callback_smoke()
       cleanup_context(ctx);
       return false;
     }
+#endif
     ignore_ret(rmw_event_fini(&event));
   }
 
@@ -486,6 +527,7 @@ test_init_and_callback_smoke()
       cleanup_context(ctx);
       return false;
     }
+#if RMW_INT2DDS_HAS_EVENT_CALLBACK_API
     if (!check_ret(
         rmw_event_set_callback(&event, noop_event_callback, reinterpret_cast<const void *>(0x2)),
         "rmw_event_set_callback(subscription)"))
@@ -497,6 +539,7 @@ test_init_and_callback_smoke()
       cleanup_context(ctx);
       return false;
     }
+#endif
     ignore_ret(rmw_event_fini(&event));
   }
 
@@ -522,6 +565,11 @@ test_init_and_callback_smoke()
 bool
 test_message_lost_take_no_event()
 {
+#if !RMW_INT2DDS_HAS_MESSAGE_LOST_EVENT_API
+  std::cout << "[INFO] test_message_lost_take_no_event skipped: RMW_EVENT_MESSAGE_LOST is not part of this rmw API"
+            << std::endl;
+  return true;
+#else
   TestContext ctx;
   if (!init_context(ctx, "message_lost_take_pub_node", "message_lost_take_sub_node")) {
     return false;
@@ -569,11 +617,17 @@ test_message_lost_take_no_event()
   cleanup_context(ctx);
   std::cout << "[OK] message_lost take no-loss validation passed" << std::endl;
   return true;
+#endif
 }
 
 bool
 test_message_lost_status_condition_mask()
 {
+#if !RMW_INT2DDS_HAS_MESSAGE_LOST_EVENT_API
+  std::cout << "[INFO] test_message_lost_status_condition_mask skipped: RMW_EVENT_MESSAGE_LOST is not part of this rmw API"
+            << std::endl;
+  return true;
+#else
   TestContext ctx;
   if (!init_context(ctx, "message_lost_mask_pub_node", "message_lost_mask_sub_node")) {
     return false;
@@ -629,6 +683,7 @@ test_message_lost_status_condition_mask()
   std::cout << "[OK] message_lost status mask validation passed"
             << " enabled_mask=" << enabled_mask << std::endl;
   return true;
+#endif
 }
 
 bool

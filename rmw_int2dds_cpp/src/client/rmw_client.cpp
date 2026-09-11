@@ -28,11 +28,11 @@
 #include "rosidl_typesupport_introspection_c/identifier.h"
 #include "rosidl_typesupport_introspection_cpp/identifier.hpp"
 
-#include "int2dds-ffi.h"
+#include "int2dds-ffi.h"  // NOLINT(build/include)
 #include "rmw_int2dds_cpp/identifier.hpp"
 #include "rmw_int2dds_cpp/types.hpp"
 #include "../wait/waitset_registry.hpp"  // NOLINT(build/include)
-#include "../common/listeners.hpp"  // NOLINT(build/include_subdir)
+#include "../common/listeners.hpp"  // NOLINT(build/include)
 #include "../graph/graph_guard.hpp"
 #include "../graph/discovery.hpp"
 #include "../common/type_hash_qos.hpp"
@@ -599,70 +599,6 @@ rmw_destroy_client(rmw_node_t * node, rmw_client_t * client)
 }
 
 rmw_ret_t
-rmw_client_request_publisher_get_actual_qos(
-  const rmw_client_t * client,
-  rmw_qos_profile_t * qos)
-{
-  RMW_CHECK_ARGUMENT_FOR_NULL(client, RMW_RET_INVALID_ARGUMENT);
-  RMW_CHECK_ARGUMENT_FOR_NULL(qos, RMW_RET_INVALID_ARGUMENT);
-
-  if (client->implementation_identifier != rmw_int2dds_cpp::implementation_identifier) {
-    RMW_SET_ERROR_MSG("client not from this implementation");
-    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION;
-  }
-
-  auto * cli_data = static_cast<rmw_int2dds_cpp::ClientData *>(client->data);
-  if (cli_data == nullptr) {
-    RMW_SET_ERROR_MSG("client data is null");
-    return RMW_RET_ERROR;
-  }
-
-  *qos = cli_data->qos;
-  return RMW_RET_OK;
-}
-
-rmw_ret_t
-rmw_client_response_subscription_get_actual_qos(
-  const rmw_client_t * client,
-  rmw_qos_profile_t * qos)
-{
-  RMW_CHECK_ARGUMENT_FOR_NULL(client, RMW_RET_INVALID_ARGUMENT);
-  RMW_CHECK_ARGUMENT_FOR_NULL(qos, RMW_RET_INVALID_ARGUMENT);
-
-  if (client->implementation_identifier != rmw_int2dds_cpp::implementation_identifier) {
-    RMW_SET_ERROR_MSG("client not from this implementation");
-    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION;
-  }
-
-  auto * cli_data = static_cast<rmw_int2dds_cpp::ClientData *>(client->data);
-  if (cli_data == nullptr) {
-    RMW_SET_ERROR_MSG("client data is null");
-    return RMW_RET_ERROR;
-  }
-
-  *qos = cli_data->qos;
-  return RMW_RET_OK;
-}
-
-rmw_ret_t
-rmw_client_set_on_new_response_callback(
-  rmw_client_t * client,
-  rmw_event_callback_t callback,
-  const void * user_data)
-{
-  RMW_CHECK_ARGUMENT_FOR_NULL(client, RMW_RET_INVALID_ARGUMENT);
-  auto * cli_data = static_cast<rmw_int2dds_cpp::ClientData *>(client->data);
-  if (cli_data == nullptr) {
-    RMW_SET_ERROR_MSG("client data is null");
-    return RMW_RET_ERROR;
-  }
-  rmw_int2dds_cpp::set_callback_slot(
-    cli_data->listener_mutex, cli_data->new_response_slot, callback, user_data);
-  rmw_int2dds_cpp::refresh_client_listener(cli_data);
-  return RMW_RET_OK;
-}
-
-rmw_ret_t
 rmw_get_gid_for_client(const rmw_client_t * client, rmw_gid_t * gid)
 {
   RMW_CHECK_ARGUMENT_FOR_NULL(client, RMW_RET_INVALID_ARGUMENT);
@@ -684,5 +620,9 @@ rmw_get_gid_for_client(const rmw_client_t * client, rmw_gid_t * gid)
 
   return RMW_RET_OK;
 }
+
+// Not part of the Foxy rmw API (Humble): rmw_client_request_publisher_get_actual_qos,
+// rmw_client_response_subscription_get_actual_qos and
+// rmw_client_set_on_new_response_callback.
 
 }  // extern "C"

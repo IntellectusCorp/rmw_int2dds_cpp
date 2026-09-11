@@ -18,10 +18,10 @@
 
 #include <mutex>
 
-#include "int2dds-ffi.h"  // NOLINT(build/include_subdir): vendored FFI header
+#include "int2dds-ffi.h"  // NOLINT(build/include): vendored FFI header
 #include "rmw_int2dds_cpp/identifier.hpp"
 #include "rmw_int2dds_cpp/types.hpp"
-#include "waitset_registry.hpp"  // NOLINT(build/include_subdir)
+#include "waitset_registry.hpp"  // NOLINT(build/include)
 
 extern "C"
 {

@@ -16,7 +16,6 @@
 
 #include "rmw/rmw.h"
 #include "rmw/error_handling.h"
-#include "rmw/features.h"
 
 #include "rcutils/logging.h"
 
@@ -95,17 +94,6 @@ rmw_set_log_severity(rmw_log_severity_t severity)
   return RMW_RET_OK;
 }
 
-bool
-rmw_feature_supported(rmw_feature_t feature)
-{
-  switch (feature) {
-    case RMW_FEATURE_MESSAGE_INFO_PUBLICATION_SEQUENCE_NUMBER:
-      return false;  // int2dds doesn't provide SampleInfo
-    case RMW_FEATURE_MESSAGE_INFO_RECEPTION_SEQUENCE_NUMBER:
-      return true;   // We track this locally
-    default:
-      return false;
-  }
-}
+// rmw_feature_supported (rmw/features.h) is Humble+; Foxy has no feature query.
 
 }  // extern "C"

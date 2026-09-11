@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "waitset_registry.hpp"  // NOLINT(build/include_subdir)
+#include "waitset_registry.hpp"  // NOLINT(build/include)
 
 #include <algorithm>
 #include <mutex>
@@ -20,7 +20,7 @@
 #include <utility>
 #include <vector>
 
-#include "int2dds-ffi.h"  // NOLINT(build/include_subdir): vendored FFI header
+#include "int2dds-ffi.h"  // NOLINT(build/include): vendored FFI header
 
 namespace rmw_int2dds_cpp
 {

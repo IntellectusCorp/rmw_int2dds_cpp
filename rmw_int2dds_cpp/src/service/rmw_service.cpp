@@ -28,11 +28,11 @@
 #include "rosidl_typesupport_introspection_c/identifier.h"
 #include "rosidl_typesupport_introspection_cpp/identifier.hpp"
 
-#include "int2dds-ffi.h"
+#include "int2dds-ffi.h"  // NOLINT(build/include)
 #include "rmw_int2dds_cpp/identifier.hpp"
 #include "rmw_int2dds_cpp/types.hpp"
 #include "../wait/waitset_registry.hpp"  // NOLINT(build/include)
-#include "../common/listeners.hpp"  // NOLINT(build/include_subdir)
+#include "../common/listeners.hpp"  // NOLINT(build/include)
 #include "../graph/graph_guard.hpp"
 #include "../graph/discovery.hpp"
 #include "../common/type_hash_qos.hpp"
@@ -665,68 +665,8 @@ rmw_service_server_is_available(
   return RMW_RET_OK;
 }
 
-rmw_ret_t
-rmw_service_request_subscription_get_actual_qos(
-  const rmw_service_t * service,
-  rmw_qos_profile_t * qos)
-{
-  RMW_CHECK_ARGUMENT_FOR_NULL(service, RMW_RET_INVALID_ARGUMENT);
-  RMW_CHECK_ARGUMENT_FOR_NULL(qos, RMW_RET_INVALID_ARGUMENT);
-
-  if (service->implementation_identifier != rmw_int2dds_cpp::implementation_identifier) {
-    RMW_SET_ERROR_MSG("service not from this implementation");
-    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION;
-  }
-
-  auto * srv_data = static_cast<rmw_int2dds_cpp::ServiceData *>(service->data);
-  if (srv_data == nullptr) {
-    RMW_SET_ERROR_MSG("service data is null");
-    return RMW_RET_ERROR;
-  }
-
-  *qos = srv_data->qos;
-  return RMW_RET_OK;
-}
-
-rmw_ret_t
-rmw_service_response_publisher_get_actual_qos(
-  const rmw_service_t * service,
-  rmw_qos_profile_t * qos)
-{
-  RMW_CHECK_ARGUMENT_FOR_NULL(service, RMW_RET_INVALID_ARGUMENT);
-  RMW_CHECK_ARGUMENT_FOR_NULL(qos, RMW_RET_INVALID_ARGUMENT);
-
-  if (service->implementation_identifier != rmw_int2dds_cpp::implementation_identifier) {
-    RMW_SET_ERROR_MSG("service not from this implementation");
-    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION;
-  }
-
-  auto * srv_data = static_cast<rmw_int2dds_cpp::ServiceData *>(service->data);
-  if (srv_data == nullptr) {
-    RMW_SET_ERROR_MSG("service data is null");
-    return RMW_RET_ERROR;
-  }
-
-  *qos = srv_data->qos;
-  return RMW_RET_OK;
-}
-
-rmw_ret_t
-rmw_service_set_on_new_request_callback(
-  rmw_service_t * service,
-  rmw_event_callback_t callback,
-  const void * user_data)
-{
-  RMW_CHECK_ARGUMENT_FOR_NULL(service, RMW_RET_INVALID_ARGUMENT);
-  auto * srv_data = static_cast<rmw_int2dds_cpp::ServiceData *>(service->data);
-  if (srv_data == nullptr) {
-    RMW_SET_ERROR_MSG("service data is null");
-    return RMW_RET_ERROR;
-  }
-  rmw_int2dds_cpp::set_callback_slot(
-    srv_data->listener_mutex, srv_data->new_request_slot, callback, user_data);
-  rmw_int2dds_cpp::refresh_service_listener(srv_data);
-  return RMW_RET_OK;
-}
+// Not part of the Foxy rmw API (Humble): rmw_service_request_subscription_get_actual_qos,
+// rmw_service_response_publisher_get_actual_qos and
+// rmw_service_set_on_new_request_callback.
 
 }  // extern "C"

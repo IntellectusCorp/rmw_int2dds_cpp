@@ -30,7 +30,7 @@
 #include "rcutils/allocator.h"
 #include "rcutils/strdup.h"
 
-#include "int2dds-ffi.h"
+#include "int2dds-ffi.h"  // NOLINT(build/include)
 #include "rmw_int2dds_cpp/identifier.hpp"
 #include "rmw_int2dds_cpp/types.hpp"
 #include "../graph/discovery.hpp"
@@ -230,8 +230,16 @@ rmw_node_t *
 rmw_create_node(
   rmw_context_t * context,
   const char * name,
-  const char * namespace_)
+  const char * namespace_,
+  size_t domain_id,
+  bool localhost_only)
 {
+  // Foxy still hands the node's domain id and localhost flag to every node, but
+  // rcl_init already resolved both into the init options before rmw_init built
+  // the participant, so the context runs with them. rmw_cyclonedds_cpp on Foxy
+  // ignores them the same way.
+  static_cast<void>(domain_id);
+  static_cast<void>(localhost_only);
   RMW_CHECK_ARGUMENT_FOR_NULL(context, nullptr);
   RMW_CHECK_ARGUMENT_FOR_NULL(name, nullptr);
   RMW_CHECK_ARGUMENT_FOR_NULL(namespace_, nullptr);

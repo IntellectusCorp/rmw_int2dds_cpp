@@ -16,7 +16,7 @@
 #include "rmw/allocators.h"
 #include "rmw/error_handling.h"
 
-#include "int2dds-ffi.h"
+#include "int2dds-ffi.h"  // NOLINT(build/include)
 #include "rmw_int2dds_cpp/identifier.hpp"
 #include "rmw_int2dds_cpp/types.hpp"
 #include "../wait/waitset_registry.hpp"  // NOLINT(build/include)

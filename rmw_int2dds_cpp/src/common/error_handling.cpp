@@ -15,7 +15,7 @@
 #include "rmw/error_handling.h"
 #include "rmw/types.h"
 
-#include "int2dds-ffi.h"
+#include "int2dds-ffi.h"  // NOLINT(build/include)
 
 namespace rmw_int2dds_cpp
 {

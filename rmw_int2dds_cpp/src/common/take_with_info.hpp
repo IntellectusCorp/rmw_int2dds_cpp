@@ -19,7 +19,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "int2dds-ffi.h"  // NOLINT(build/include_subdir)
+#include "int2dds-ffi.h"  // NOLINT(build/include)
 
 namespace rmw_int2dds_cpp
 {

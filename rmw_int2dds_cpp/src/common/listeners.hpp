@@ -17,8 +17,7 @@
 
 #include <mutex>
 
-#include "rmw/event_callback_type.h"
-
+#include "rmw_int2dds_cpp/foxy_compat.hpp"
 #include "rmw_int2dds_cpp/types.hpp"
 
 namespace rmw_int2dds_cpp

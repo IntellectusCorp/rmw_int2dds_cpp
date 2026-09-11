@@ -28,12 +28,13 @@
 #include <vector>
 
 #include "rmw/event.h"
-#include "rmw/event_callback_type.h"
 #include "rmw/types.h"
 #include "rmw/qos_profiles.h"
 #include "rosidl_runtime_c/message_type_support_struct.h"
 #include "rosidl_runtime_c/service_type_support_struct.h"
 #include "rmw_dds_common/context.hpp"
+
+#include "rmw_int2dds_cpp/foxy_compat.hpp"
 
 // Forward declarations from int2dds FFI
 extern "C" {

@@ -16,7 +16,9 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <string>
 #include <type_traits>
+#include <vector>
 
 namespace rmw_int2dds_cpp
 {
@@ -48,6 +50,103 @@ size_t fixed_primitive_size(uint8_t type_id)
     default:
       return 0;
   }
+}
+
+// C typesupport collections are addressed from their memory layout rather than
+// through the introspection accessors. Foxy's C introspection leaves
+// size/get/get_const/resize NULL for every primitive and string array or
+// sequence, and gives fixed-size arrays of messages a get function that expects
+// a pointer to the array pointer (rosidl#531). rmw_cyclonedds_cpp on Foxy walks
+// C collections the same way; the layouts are identical on later distros.
+
+// Layout shared by every rosidl_runtime_c__*__Sequence.
+struct GenericCSequence
+{
+  void * data;
+  size_t size;
+  size_t capacity;
+};
+
+bool is_c_sequence(const rosidl_typesupport_introspection_c__MessageMember * member)
+{
+  return member->is_upper_bound_ || member->array_size_ == 0;
+}
+
+// Size of one element of a C array/sequence member, or 0 if unsupported.
+size_t c_element_size(const rosidl_typesupport_introspection_c__MessageMember * member)
+{
+  switch (member->type_id_) {
+    case rosidl_typesupport_introspection_c__ROS_TYPE_BOOL:
+      return sizeof(bool);
+    case rosidl_typesupport_introspection_c__ROS_TYPE_STRING:
+      return sizeof(rosidl_runtime_c__String);
+    case rosidl_typesupport_introspection_c__ROS_TYPE_WSTRING:
+      return sizeof(rosidl_runtime_c__U16String);
+    case rosidl_typesupport_introspection_c__ROS_TYPE_MESSAGE:
+      if (member->members_ == nullptr) {
+        return 0;
+      }
+      return static_cast<const rosidl_typesupport_introspection_c__MessageMembers *>(
+        member->members_->data)->size_of_;
+    default:
+      return fixed_primitive_size(member->type_id_);
+  }
+}
+
+// Resize a C sequence member to `size` default-initialized elements, releasing
+// what it held (fini + init, which is what the generated resize functions do).
+bool resize_c_sequence(
+  void * member_data,
+  const rosidl_typesupport_introspection_c__MessageMember * member,
+  size_t size)
+{
+  // Present for sequences of messages on Foxy, and for every sequence later on.
+  if (member->resize_function != nullptr) {
+    return member->resize_function(member_data, size);
+  }
+
+#define INT2DDS_RESIZE_C_SEQUENCE(TYPE_ID, SEQUENCE) \
+  case TYPE_ID: { \
+      auto * seq = static_cast<rosidl_runtime_c__ ## SEQUENCE ## __Sequence *>(member_data); \
+      rosidl_runtime_c__ ## SEQUENCE ## __Sequence__fini(seq); \
+      return rosidl_runtime_c__ ## SEQUENCE ## __Sequence__init(seq, size); \
+    }
+
+  switch (member->type_id_) {
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_BOOL, boolean)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_BYTE, octet)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_CHAR, char)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_UINT8, uint8)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_INT8, int8)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_UINT16, uint16)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_INT16, int16)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_UINT32, uint32)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_INT32, int32)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_UINT64, uint64)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_INT64, int64)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_FLOAT, float)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_DOUBLE, double)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_LONG_DOUBLE, long_double)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_WCHAR, wchar)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_STRING, String)
+    INT2DDS_RESIZE_C_SEQUENCE(rosidl_typesupport_introspection_c__ROS_TYPE_WSTRING, U16String)
+    default:
+      return false;
+  }
+
+#undef INT2DDS_RESIZE_C_SEQUENCE
+}
+
+// A C++ bool sequence is a std::vector<bool> (rosidl_runtime_cpp::BoundedVector
+// wraps one as its only base when bounded), which has no addressable elements.
+// Foxy's C++ introspection gives it no accessors at all and only Humble added
+// fetch/assign for it, so it is (de)serialized directly, as rmw_cyclonedds_cpp
+// does on Foxy.
+bool is_cpp_bool_sequence(const rosidl_typesupport_introspection_cpp::MessageMember * member)
+{
+  return member->is_array_ &&
+         member->type_id_ == rosidl_typesupport_introspection_cpp::ROS_TYPE_BOOL &&
+         (member->is_upper_bound_ || member->array_size_ == 0);
 }
 
 }  // namespace
@@ -289,46 +388,41 @@ bool CdrSerializer::serialize_member_c(
   const rosidl_typesupport_introspection_c__MessageMember * member)
 {
   if (member->is_array_) {
-    // Handle arrays and sequences
+    // Arrays and sequences, addressed from their layout (see GenericCSequence).
+    const uint8_t * elements = static_cast<const uint8_t *>(member_data);
     size_t array_size = member->array_size_;
-    const void * collection_data = member_data;
 
-    if (member->is_upper_bound_ || array_size == 0) {
-      // Dynamic sequence - get size from sequence structure
-      const auto * seq = static_cast<const rosidl_runtime_c__char__Sequence *>(member_data);
+    if (is_c_sequence(member)) {
+      const auto * seq = static_cast<const GenericCSequence *>(member_data);
+      elements = static_cast<const uint8_t *>(seq->data);
       array_size = seq->size;
 
       // Serialize sequence length
       serialize_uint32(static_cast<uint32_t>(array_size));
     }
 
+    if (array_size == 0) {
+      return true;
+    }
+    if (elements == nullptr) {
+      return false;
+    }
+
     const size_t element_size = fixed_primitive_size(member->type_id_);
     if (element_size != 0) {
-      if (array_size == 0) {
-        return true;
-      }
-      const void * first_element = member->get_const_function != nullptr ?
-        member->get_const_function(collection_data, 0) : nullptr;
-      if (first_element != nullptr) {
-        align(element_size);
-        serialize_raw(first_element, array_size * element_size);
-        return true;
-      }
-      // For a fixed primitive the per-element loop below dereferences the accessor
-      // result directly (no fetch fallback here); a null first element cannot be
-      // bulk-copied and would be dereferenced as null, so fail cleanly instead.
+      align(element_size);
+      serialize_raw(elements, array_size * element_size);
+      return true;
+    }
+
+    const size_t stride = c_element_size(member);
+    if (stride == 0) {
       return false;
     }
 
     // Serialize each element
     for (size_t i = 0; i < array_size; ++i) {
-      const void * element_data = nullptr;
-      if (member->get_const_function != nullptr) {
-        element_data = member->get_const_function(collection_data, i);
-      } else {
-        // Fallback: this shouldn't happen in ROS2 Humble
-        return false;
-      }
+      const void * element_data = elements + i * stride;
 
       switch (member->type_id_) {
         case rosidl_typesupport_introspection_c__ROS_TYPE_BOOL:
@@ -474,6 +568,15 @@ bool CdrSerializer::serialize_member_cpp(
   const rosidl_typesupport_introspection_cpp::MessageMember * member)
 {
   if (member->is_array_) {
+    if (is_cpp_bool_sequence(member)) {
+      const auto & values = *static_cast<const std::vector<bool> *>(member_data);
+      serialize_uint32(static_cast<uint32_t>(values.size()));
+      for (const bool value : values) {
+        serialize_bool(value);
+      }
+      return true;
+    }
+
     size_t array_size = member->array_size_;
 
     if (member->is_upper_bound_ || array_size == 0) {
@@ -504,17 +607,15 @@ bool CdrSerializer::serialize_member_cpp(
         element_data = member->get_const_function(member_data, i);
       }
 
+      // Only std::vector<bool> lacks get_const (handled above), and Foxy's
+      // introspection has no fetch_function to fall back to.
       auto fetch_value = [&](auto & value) -> bool {
           using ValueT = typename std::decay<decltype(value)>::type;
-          if (element_data != nullptr) {
-            value = *static_cast<const ValueT *>(element_data);
-            return true;
+          if (element_data == nullptr) {
+            return false;
           }
-          if (member->fetch_function != nullptr) {
-            member->fetch_function(member_data, i, &value);
-            return true;
-          }
-          return false;
+          value = *static_cast<const ValueT *>(element_data);
+          return true;
         };
 
       switch (member->type_id_) {
@@ -959,45 +1060,44 @@ bool CdrDeserializer::deserialize_member_c(
   const rosidl_typesupport_introspection_c__MessageMember * member)
 {
   if (member->is_array_) {
+    // Arrays and sequences, addressed from their layout (see GenericCSequence).
+    uint8_t * elements = static_cast<uint8_t *>(member_data);
     size_t array_size = member->array_size_;
-    void * collection_data = member_data;
 
-    if (member->is_upper_bound_ || array_size == 0) {
+    if (is_c_sequence(member)) {
       // Dynamic sequence
       array_size = deserialize_uint32();
       if (array_size > size_ - pos_) {
         return false;
       }
 
-      // Resize sequence
-      if (member->resize_function != nullptr) {
-        if (!member->resize_function(member_data, array_size)) {
-          return false;
-        }
+      // Resize sequence (also releases what a reused message held)
+      if (!resize_c_sequence(member_data, member, array_size)) {
+        return false;
       }
+      elements = static_cast<uint8_t *>(static_cast<GenericCSequence *>(member_data)->data);
+    }
+
+    if (array_size == 0) {
+      return true;
+    }
+    if (elements == nullptr) {
+      return false;
     }
 
     const size_t element_size = fixed_primitive_size(member->type_id_);
     if (element_size != 0) {
-      if (array_size == 0) {
-        return true;
-      }
-      void * first_element = member->get_function != nullptr ?
-        member->get_function(collection_data, 0) : nullptr;
-      if (first_element != nullptr) {
-        align(element_size);
-        return deserialize_raw(first_element, array_size * element_size);
-      }
+      align(element_size);
+      return deserialize_raw(elements, array_size * element_size);
+    }
+
+    const size_t stride = c_element_size(member);
+    if (stride == 0) {
+      return false;
     }
 
     for (size_t i = 0; i < array_size; ++i) {
-      void * element_data = nullptr;
-      if (member->get_function != nullptr) {
-        element_data = member->get_function(collection_data, i);
-      } else {
-        // Fallback: this shouldn't happen in ROS2 Humble
-        return false;
-      }
+      void * element_data = elements + i * stride;
 
       switch (member->type_id_) {
         case rosidl_typesupport_introspection_c__ROS_TYPE_BOOL:
@@ -1149,6 +1249,19 @@ bool CdrDeserializer::deserialize_member_cpp(
   const rosidl_typesupport_introspection_cpp::MessageMember * member)
 {
   if (member->is_array_) {
+    if (is_cpp_bool_sequence(member)) {
+      const uint32_t count = deserialize_uint32();
+      if (count > size_ - pos_) {
+        return false;
+      }
+      auto & values = *static_cast<std::vector<bool> *>(member_data);
+      values.resize(count);
+      for (uint32_t i = 0; i < count; ++i) {
+        values[i] = deserialize_bool();
+      }
+      return true;
+    }
+
     size_t array_size = member->array_size_;
 
     if (member->is_upper_bound_ || array_size == 0) {
@@ -1180,17 +1293,15 @@ bool CdrDeserializer::deserialize_member_cpp(
         element_data = member->get_function(member_data, i);
       }
 
+      // Only std::vector<bool> lacks get (handled above), and Foxy's
+      // introspection has no assign_function to fall back to.
       auto store_value = [&](const auto & value) -> bool {
           using ValueT = typename std::decay<decltype(value)>::type;
-          if (element_data != nullptr) {
-            *static_cast<ValueT *>(element_data) = value;
-            return true;
+          if (element_data == nullptr) {
+            return false;
           }
-          if (member->assign_function != nullptr) {
-            member->assign_function(member_data, i, &value);
-            return true;
-          }
-          return false;
+          *static_cast<ValueT *>(element_data) = value;
+          return true;
         };
 
       switch (member->type_id_) {

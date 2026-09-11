@@ -43,10 +43,10 @@
 #include "rcutils/allocator.h"
 #include "rcutils/strdup.h"
 
-#include "int2dds-ffi.h"  // NOLINT(build/include_subdir): vendored FFI header
+#include "int2dds-ffi.h"  // NOLINT(build/include): vendored FFI header
 #include "rmw_int2dds_cpp/identifier.hpp"
 #include "rmw_int2dds_cpp/types.hpp"
-#include "discovery.hpp"  // NOLINT(build/include_subdir): same dir
+#include "discovery.hpp"  // NOLINT(build/include): same dir
 
 // Helper to demangle service name (remove "rq"/"rr" prefix)
 static std::string demangle_service_name(const std::string & service_name)

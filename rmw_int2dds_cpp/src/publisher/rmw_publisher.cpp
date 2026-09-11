@@ -14,13 +14,12 @@
 
 #include <cstdlib>
 #include <cstring>
-#include <limits>
+#include <string>
 #include <vector>
 
 #include "rmw/rmw.h"
 #include "rmw/allocators.h"
 #include "rmw/error_handling.h"
-#include "rmw/get_network_flow_endpoints.h"
 #include "rmw/validate_full_topic_name.h"
 
 #include "rcutils/allocator.h"
@@ -34,11 +33,11 @@
 #include "rosidl_typesupport_introspection_cpp/field_types.hpp"
 #include "rosidl_typesupport_introspection_cpp/message_introspection.hpp"
 
-#include "int2dds-ffi.h"
+#include "int2dds-ffi.h"  // NOLINT(build/include)
 #include "rmw_int2dds_cpp/identifier.hpp"
 #include "rmw_int2dds_cpp/types.hpp"
 #include "../wait/waitset_registry.hpp"  // NOLINT(build/include)
-#include "../common/listeners.hpp"  // NOLINT(build/include_subdir)
+#include "../common/listeners.hpp"  // NOLINT(build/include)
 #include "../graph/graph_guard.hpp"
 #include "../graph/discovery.hpp"
 #include "../common/type_hash_qos.hpp"
@@ -337,27 +336,6 @@ create_topic_with_introspection_type_info(
   return dds_ret;
 }
 
-int64_t
-convert_wait_timeout_to_ms(const rmw_time_t & wait_timeout)
-{
-  const rmw_time_t infinite = RMW_DURATION_INFINITE;
-  if (wait_timeout.sec == infinite.sec && wait_timeout.nsec == infinite.nsec) {
-    // int2dds FFI currently expects a finite millisecond duration.
-    return std::numeric_limits<int32_t>::max() * 1000LL;
-  }
-
-  if (wait_timeout.sec == 0 && wait_timeout.nsec == 0) {
-    return 0;
-  }
-
-  int64_t timeout_ms = static_cast<int64_t>(wait_timeout.sec) * 1000LL;
-  timeout_ms += static_cast<int64_t>(wait_timeout.nsec) / 1000000LL;
-  if (timeout_ms == 0) {
-    timeout_ms = 1;
-  }
-  return timeout_ms;
-}
-
 }  // namespace
 
 extern "C"
@@ -382,15 +360,8 @@ rmw_create_publisher(
     return nullptr;
   }
 
-  // int2dds does not expose per-endpoint network flows (see
-  // rmw_publisher_get_network_flow_endpoints), so a strict requirement for unique
-  // ones cannot be honoured and must be reported as an error rather than ignored.
-  if (publisher_options->require_unique_network_flow_endpoints ==
-    RMW_UNIQUE_NETWORK_FLOW_ENDPOINTS_STRICTLY_REQUIRED)
-  {
-    RMW_SET_ERROR_MSG("Unique network flow endpoints are not supported by rmw_int2dds_cpp");
-    return nullptr;
-  }
+  // Foxy's rmw_publisher_options_t has no require_unique_network_flow_endpoints
+  // (Galactic+), so there is no network-flow requirement to reject here.
 
   if (!qos_policies->avoid_ros_namespace_conventions) {
     int validation_result = 0;
@@ -841,63 +812,8 @@ rmw_get_gid_for_publisher(const rmw_publisher_t * publisher, rmw_gid_t * gid)
   return RMW_RET_OK;
 }
 
-rmw_ret_t
-rmw_publisher_wait_for_all_acked(
-  const rmw_publisher_t * publisher,
-  rmw_time_t wait_timeout)
-{
-  RMW_CHECK_ARGUMENT_FOR_NULL(publisher, RMW_RET_INVALID_ARGUMENT);
-
-  if (publisher->implementation_identifier != rmw_int2dds_cpp::implementation_identifier) {
-    RMW_SET_ERROR_MSG("publisher not from this implementation");
-    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION;
-  }
-
-  auto * pub_data = static_cast<rmw_int2dds_cpp::PublisherData *>(publisher->data);
-  if (pub_data == nullptr || pub_data->datawriter == nullptr) {
-    RMW_SET_ERROR_MSG("publisher data is null");
-    return RMW_RET_ERROR;
-  }
-
-  const int64_t timeout_ms = convert_wait_timeout_to_ms(wait_timeout);
-  const Int2DdsRet ret = int2dds_datawriter_wait_for_acknowledgments(
-    pub_data->datawriter, timeout_ms);
-  switch (ret) {
-    case INT2DDS_RET_OK:
-      return RMW_RET_OK;
-    case INT2DDS_RET_TIMEOUT:
-      return RMW_RET_TIMEOUT;
-    default:
-      RMW_SET_ERROR_MSG("failed to wait for all acknowledgements");
-      return RMW_RET_ERROR;
-  }
-}
-
-rmw_ret_t
-rmw_publisher_set_on_new_subscription_callback(
-  rmw_publisher_t * publisher,
-  rmw_event_callback_t callback,
-  const void * user_data)
-{
-  (void)publisher;
-  (void)callback;
-  (void)user_data;
-  RMW_SET_ERROR_MSG("rmw_publisher_set_on_new_subscription_callback is not supported");
-  return RMW_RET_UNSUPPORTED;
-}
-
-rmw_ret_t
-rmw_publisher_get_network_flow_endpoints(
-  const rmw_publisher_t * publisher,
-  rcutils_allocator_t * allocator,
-  rmw_network_flow_endpoint_array_t * network_flow_endpoint_array)
-{
-  (void)publisher;
-  (void)allocator;
-  (void)network_flow_endpoint_array;
-  // Not supported by int2dds
-  RMW_SET_ERROR_MSG("rmw_publisher_get_network_flow_endpoints is not supported by rmw_int2dds_cpp");
-  return RMW_RET_UNSUPPORTED;
-}
+// rmw_publisher_wait_for_all_acked (Humble) and
+// rmw_publisher_get_network_flow_endpoints (Galactic) are not part of the Foxy
+// rmw API, and neither is an on-new-subscription callback hook.
 
 }  // extern "C"

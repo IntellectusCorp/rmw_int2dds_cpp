@@ -28,10 +28,10 @@
 #include "rmw/events_statuses/incompatible_type.h"
 #endif
 
-#include "int2dds-ffi.h"
+#include "int2dds-ffi.h"  // NOLINT(build/include)
 #include "rmw_int2dds_cpp/identifier.hpp"
 #include "rmw_int2dds_cpp/types.hpp"
-#include "waitset_registry.hpp"  // NOLINT(build/include_subdir)
+#include "waitset_registry.hpp"  // NOLINT(build/include)
 
 namespace
 {
@@ -105,6 +105,7 @@ record_wait_profile(
 uint32_t
 event_type_to_status_mask(rmw_event_type_t event_type)
 {
+  // No RMW_EVENT_MESSAGE_LOST case: that event is Galactic+ and Foxy has none.
   switch (event_type) {
     case RMW_EVENT_LIVELINESS_LOST:
       return INT2DDS_STATUS_LIVELINESS_LOST;
@@ -130,8 +131,6 @@ event_type_to_status_mask(rmw_event_type_t event_type)
     case RMW_EVENT_SUBSCRIPTION_INCOMPATIBLE_TYPE:
       return INT2DDS_STATUS_REQUESTED_INCOMPATIBLE_TYPE;
 #endif
-    case RMW_EVENT_MESSAGE_LOST:
-      return INT2DDS_STATUS_SAMPLE_LOST;
 #ifdef RMW_EVENT_SUBSCRIPTION_MATCHED
     case RMW_EVENT_SUBSCRIPTION_MATCHED:
       return INT2DDS_STATUS_SUBSCRIPTION_MATCHED;

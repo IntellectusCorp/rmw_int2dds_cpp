@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "listeners.hpp"  // NOLINT(build/include_subdir)
+#include "listeners.hpp"  // NOLINT(build/include)
 
 #include <algorithm>
 #include <mutex>
 
-#include "int2dds-ffi.h"  // NOLINT(build/include_subdir)
+#include "int2dds-ffi.h"  // NOLINT(build/include)
 
 namespace rmw_int2dds_cpp
 {

@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "take_with_info.hpp"  // NOLINT(build/include_subdir)
+#include "take_with_info.hpp"  // NOLINT(build/include)
 
 #include <algorithm>
 #include <cstring>
+#include <vector>
 
 namespace rmw_int2dds_cpp
 {

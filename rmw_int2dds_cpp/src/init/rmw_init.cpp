@@ -22,7 +22,7 @@
 #include "rcutils/allocator.h"
 #include "rcutils/strdup.h"
 
-#include "int2dds-ffi.h"
+#include "int2dds-ffi.h"  // NOLINT(build/include)
 #include "rmw_int2dds_cpp/identifier.hpp"
 #include "rmw_int2dds_cpp/types.hpp"
 #include "../graph/discovery.hpp"
@@ -293,7 +293,8 @@ rmw_init(const rmw_init_options_t * options, rmw_context_t * context)
   }
   context_data->domain_id = actual_domain_id;
 #if __has_include("rmw/localhost.h")
-  // Humble expresses localhost-only via the init-options localhost_only field.
+  // Foxy and Humble express localhost-only via the init-options localhost_only
+  // field (rcl_init resolves ROS_LOCALHOST_ONLY into it before rmw_init).
   context_data->localhost_only = options->localhost_only == RMW_LOCALHOST_ONLY_ENABLED;
 #endif
 
@@ -307,7 +308,8 @@ rmw_init(const rmw_init_options_t * options, rmw_context_t * context)
 
   // Set up context
   context->instance_id = options->instance_id;
-  context->actual_domain_id = actual_domain_id;
+  // rmw_context_t has no actual_domain_id on Foxy (Galactic+); rcl keeps the
+  // resolved domain id itself (rcl_node_get_domain_id).
   context->implementation_identifier = rmw_int2dds_cpp::implementation_identifier;
   context->impl = reinterpret_cast<rmw_context_impl_t *>(context_data);
 

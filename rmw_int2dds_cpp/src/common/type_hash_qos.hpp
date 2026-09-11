@@ -23,7 +23,9 @@
 
 #include "rmw/types.h"
 
-#include "int2dds-ffi.h"
+#include "rmw_int2dds_cpp/foxy_compat.hpp"  // RMW_DURATION_INFINITE on Foxy
+
+#include "int2dds-ffi.h"  // NOLINT(build/include)
 
 namespace rmw_int2dds_cpp
 {

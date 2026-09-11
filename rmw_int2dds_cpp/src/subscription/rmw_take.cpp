@@ -36,11 +36,11 @@
 #include "rosidl_typesupport_introspection_cpp/identifier.hpp"
 #include "rosidl_typesupport_introspection_cpp/message_introspection.hpp"
 
-#include "int2dds-ffi.h"  // NOLINT(build/include_subdir): vendored FFI header
+#include "int2dds-ffi.h"  // NOLINT(build/include): vendored FFI header
 #include "rmw_int2dds_cpp/identifier.hpp"
 #include "rmw_int2dds_cpp/types.hpp"
 #include "rmw_int2dds_cpp/cdr_serializer.hpp"
-#include "../common/take_with_info.hpp"  // NOLINT(build/include_subdir)
+#include "../common/take_with_info.hpp"  // NOLINT(build/include)
 
 // Held per subscription, so this multiplies by reader count -- size it for the common
 // case. Larger payloads grow the buffer on demand; get_data reports the size it needs.
@@ -128,8 +128,9 @@ fill_message_info_from_sample(
   message_info->source_timestamp =
     info != nullptr ? rmw_int2dds_cpp::sample_info_source_timestamp_ns(*info) : 0;
   std::ignore = rcutils_system_time_now(&message_info->received_timestamp);
-  message_info->publication_sequence_number = RMW_MESSAGE_INFO_SEQUENCE_NUMBER_UNSUPPORTED;
-  message_info->reception_sequence_number = reception_sequence;
+  // Foxy's rmw_message_info_t has no publication/reception sequence numbers
+  // (Humble); the counter is still kept so the take paths match the humble branch.
+  static_cast<void>(reception_sequence);
   // int2dds has no intra-process transport and its SampleInfo carries no
   // intra-process flag, so a received sample is never intra-process. This is the
   // single point to revisit if int2dds ever gains an intra-process delivery path.

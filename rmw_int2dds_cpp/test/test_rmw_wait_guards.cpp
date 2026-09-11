@@ -31,6 +31,7 @@
 #include "rmw/rmw.h"
 #include "rmw/error_handling.h"
 
+#include "rmw_int2dds_cpp/foxy_compat.hpp"  // RMW_DURATION_INFINITE on Foxy
 #include "rmw_int2dds_cpp/identifier.hpp"
 
 namespace
@@ -158,8 +159,8 @@ protected:
 
     EXPECT_EQ(RMW_RET_OK, trigger_ret.load());
     EXPECT_EQ(RMW_RET_OK, rescue_ret.load());
-    EXPECT_FALSE(watchdog_fired.load())
-      << "rmw_wait did not wake on a guard triggered from another thread";
+    EXPECT_FALSE(watchdog_fired.load()) <<
+      "rmw_wait did not wake on a guard triggered from another thread";
     EXPECT_EQ(RMW_RET_OK, ret);
     EXPECT_TRUE(reported(0));
   }
@@ -215,8 +216,8 @@ TEST_F(GuardFixture, GuardTriggeredBeforeWaitReturnsPromptly)
   const auto elapsed = std::chrono::steady_clock::now() - t0;
 
   EXPECT_TRUE(reported(0));
-  EXPECT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(), 200)
-    << "an already set trigger was not observed until the wait timed out";
+  EXPECT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(), 200) <<
+    "an already set trigger was not observed until the wait timed out";
 }
 
 TEST_F(GuardFixture, MultipleGuardsOnlyTriggeredReported)

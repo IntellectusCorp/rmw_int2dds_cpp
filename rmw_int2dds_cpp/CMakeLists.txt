@@ -134,8 +134,9 @@ add_library(rmw_int2dds_cpp SHARED
   src/graph/rmw_graph.cpp
   src/graph/discovery.cpp
 
-  # QoS
-  src/qos/rmw_qos.cpp
+  # QoS: rmw_qos_profile_check_compatible (src/qos/rmw_qos.cpp on the humble
+  # branch) is Galactic+ and its helper rmw_dds_common/qos.hpp does not exist on
+  # Foxy, so there is no QoS source here.
 
   # Serialization
   src/serialization/rmw_serialize.cpp
@@ -299,21 +300,40 @@ if(BUILD_TESTING)
   set(AMENT_LINT_AUTO_FILE_EXCLUDE
     ${RMW_INT2DDS_LINT_EXCLUDE_FILES}
   )
+  # Foxy's ament_lint_auto predates AMENT_LINT_AUTO_FILE_EXCLUDE, so copyright
+  # and uncrustify are added below with the same exclude list. Their Foxy
+  # command-line --exclude matches base names rather than paths, so the list is
+  # passed as base names.
   set(AMENT_LINT_AUTO_EXCLUDE
+    ament_cmake_copyright
     ament_cmake_cpplint
     ament_cmake_flake8
+    ament_cmake_uncrustify
   )
   ament_lint_auto_find_test_dependencies()
 
-  # Humble's ament_lint_auto forwards AMENT_LINT_AUTO_FILE_EXCLUDE to cpplint,
-  # copyright and uncrustify, but not to flake8. Keep the package lint targets
-  # explicit so generated/runtime validation assets do not fail release lint.
+  find_package(ament_cmake_copyright REQUIRED)
+  find_package(ament_cmake_uncrustify REQUIRED)
+  set(RMW_INT2DDS_LINT_EXCLUDE_NAMES)
+  foreach(_exclude_file ${RMW_INT2DDS_LINT_EXCLUDE_FILES})
+    get_filename_component(_exclude_name "${_exclude_file}" NAME)
+    list(APPEND RMW_INT2DDS_LINT_EXCLUDE_NAMES "${_exclude_name}")
+  endforeach()
+  ament_copyright("${CMAKE_CURRENT_SOURCE_DIR}" --exclude ${RMW_INT2DDS_LINT_EXCLUDE_NAMES})
+  ament_uncrustify("${CMAKE_CURRENT_SOURCE_DIR}" --exclude ${RMW_INT2DDS_LINT_EXCLUDE_NAMES})
+
+  # ament_lint_auto never forwarded AMENT_LINT_AUTO_FILE_EXCLUDE to flake8.
+  # Keep the package lint targets explicit so generated/runtime validation
+  # assets do not fail release lint.
   ament_flake8(--exclude "${RMW_INT2DDS_LINT_EXCLUDE_FILES}")
   # Lint only the paths we own. Passing explicit paths (before FILTERS) works
   # identically on every ament_cmake_cpplint version, unlike EXCLUDE which is
   # single-value on Humble/Jazzy and silently turns the exclude list into
   # positional lint targets. include/ is narrowed to our namespace so a
   # vendored include/int2dds-ffi.h can never enter the lint scope.
+  # Foxy's cpplint predates the build/include_subdir category and reports that
+  # check as build/include, so the include lines it applies to carry
+  # NOLINT(build/include) instead of being filtered package-wide.
   ament_cpplint(
     "${CMAKE_CURRENT_SOURCE_DIR}/include/rmw_int2dds_cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"

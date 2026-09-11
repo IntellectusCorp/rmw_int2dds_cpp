@@ -19,8 +19,11 @@
 #include "rmw/rmw.h"
 #include "rmw/event.h"
 #include "rmw/error_handling.h"
-#include "rmw/events_statuses/events_statuses.h"
-#include "rmw/qos_policy_kind.h"
+// Foxy has no rmw/events_statuses/ (Galactic+): the liveliness and deadline
+// statuses live in rmw/types.h, the incompatible-QoS ones and
+// rmw_qos_policy_kind_t in rmw/incompatible_qos_events_statuses.h.
+#include "rmw/incompatible_qos_events_statuses.h"
+#include "rmw/types.h"
 
 // ROS 2 Iron and newer (e.g. Jazzy) expose matched events; stock Humble does not
 // define the RMW_EVENT_*_MATCHED enum values nor rmw/events_statuses/matched.h.
@@ -36,10 +39,10 @@
 #include "rmw/events_statuses/incompatible_type.h"
 #endif
 
-#include "int2dds-ffi.h"  // NOLINT(build/include_subdir): vendored FFI header
+#include "int2dds-ffi.h"  // NOLINT(build/include): vendored FFI header
 #include "rmw_int2dds_cpp/identifier.hpp"
 #include "rmw_int2dds_cpp/types.hpp"
-#include "../common/listeners.hpp"  // NOLINT(build/include_subdir)
+#include "../common/listeners.hpp"  // NOLINT(build/include)
 #include "../wait/waitset_registry.hpp"  // NOLINT(build/include)
 
 
@@ -76,7 +79,6 @@ is_supported_subscription_event(rmw_event_type_t event_type)
 #ifdef RMW_INT2DDS_HAS_INCOMPATIBLE_TYPE_EVENT
     case RMW_EVENT_SUBSCRIPTION_INCOMPATIBLE_TYPE:
 #endif
-    case RMW_EVENT_MESSAGE_LOST:
 #ifdef RMW_INT2DDS_HAS_MATCHED_EVENT
     case RMW_EVENT_SUBSCRIPTION_MATCHED:
 #endif
@@ -120,36 +122,12 @@ event_type_to_status_mask(rmw_event_type_t event_type)
     case RMW_EVENT_SUBSCRIPTION_INCOMPATIBLE_TYPE:
       return INT2DDS_STATUS_REQUESTED_INCOMPATIBLE_TYPE;
 #endif
-    case RMW_EVENT_MESSAGE_LOST:
-      return INT2DDS_STATUS_SAMPLE_LOST;
 #ifdef RMW_INT2DDS_HAS_MATCHED_EVENT
     case RMW_EVENT_SUBSCRIPTION_MATCHED:
       return INT2DDS_STATUS_SUBSCRIPTION_MATCHED;
 #endif
     default:
       return 0;
-  }
-}
-
-[[maybe_unused]] void
-populate_message_lost_status(
-  const Int2DdsSampleLostStatus & ffi_status,
-  size_t * last_total_count,
-  rmw_message_lost_status_t * status,
-  bool * changed)
-{
-  const size_t total_count = ffi_status.total_count > 0 ?
-    static_cast<size_t>(ffi_status.total_count) : 0u;
-  const size_t total_count_change = ffi_status.total_count_change > 0 ?
-    static_cast<size_t>(ffi_status.total_count_change) : 0u;
-
-  status->total_count = total_count;
-  status->total_count_change = total_count_change;
-  *changed = (total_count_change != 0) ||
-    (last_total_count != nullptr && *last_total_count != total_count);
-
-  if (last_total_count != nullptr) {
-    *last_total_count = total_count;
   }
 }
 
@@ -466,19 +444,6 @@ take_subscription_event(
         return RMW_RET_OK;
       }
 #endif
-    case RMW_EVENT_MESSAGE_LOST: {
-        auto * status = static_cast<rmw_message_lost_status_t *>(event_info);
-        Int2DdsSampleLostStatus ffi_status{};
-        Int2DdsRet ret = int2dds_datareader_get_sample_lost_status(
-          sub_data->datareader, &ffi_status);
-        if (ret != INT2DDS_RET_OK) {
-          RMW_SET_ERROR_MSG("failed to get sample lost status");
-          return RMW_RET_ERROR;
-        }
-        populate_message_lost_status(
-          ffi_status, &event_data->last_total_count, status, changed);
-        return RMW_RET_OK;
-      }
 #ifdef RMW_INT2DDS_HAS_MATCHED_EVENT
     case RMW_EVENT_SUBSCRIPTION_MATCHED: {
         auto * status = static_cast<rmw_matched_status_t *>(event_info);
@@ -735,229 +700,8 @@ rmw_event_fini(rmw_event_t * event)
   return RMW_RET_OK;
 }
 
-rmw_ret_t
-rmw_event_set_callback(
-  rmw_event_t * event,
-  rmw_event_callback_t callback,
-  const void * user_data)
-{
-  RMW_CHECK_ARGUMENT_FOR_NULL(event, RMW_RET_INVALID_ARGUMENT);
-
-  if (event->implementation_identifier != rmw_int2dds_cpp::implementation_identifier) {
-    RMW_SET_ERROR_MSG("event not from this implementation");
-    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION;
-  }
-
-  auto * event_data = static_cast<rmw_int2dds_cpp::EventData *>(event->data);
-  if (event_data == nullptr) {
-    RMW_SET_ERROR_MSG("event data is null");
-    return RMW_RET_ERROR;
-  }
-
-  event_data->callback = callback;
-  event_data->user_data = user_data;
-
-#ifdef RMW_INT2DDS_HAS_MATCHED_EVENT
-  // Matched events are delivered asynchronously by the int2dds listener. Route
-  // the callback to the entity it watches and flush any occurrences that fired
-  // before the callback was registered (rmw semantics: deliver the backlog).
-  if (event_data->event_type == RMW_EVENT_PUBLICATION_MATCHED &&
-    event_data->entity_data != nullptr)
-  {
-    auto * pub_data = static_cast<rmw_int2dds_cpp::PublisherData *>(event_data->entity_data);
-    {
-      std::lock_guard<std::mutex> lock(pub_data->matched_mutex);
-      pub_data->matched_callback = callback;
-      pub_data->matched_user_data = user_data;
-      if (callback != nullptr && pub_data->datawriter != nullptr) {
-        // Reconstruct matches that occurred while no listener was active
-        // (the listener mask is only enabled while a callback is registered).
-        Int2DdsPublicationMatchedStatus matched_status = {};
-        const int32_t total_count =
-          (INT2DDS_RET_OK == int2dds_datawriter_get_publication_matched_status(
-            pub_data->datawriter, &matched_status)) ? matched_status.total_count : 0;
-        if (static_cast<size_t>(total_count) > pub_data->matched_total_seen) {
-          pub_data->matched_unread +=
-            static_cast<size_t>(total_count) - pub_data->matched_total_seen;
-          pub_data->matched_total_seen = static_cast<size_t>(total_count);
-        }
-      }
-      if (callback != nullptr && pub_data->matched_unread > 0) {
-        callback(user_data, pub_data->matched_unread);
-        pub_data->matched_unread = 0;
-      }
-    }
-    // Outside the lock: the refresh helper re-acquires matched_mutex itself.
-    rmw_int2dds_cpp::refresh_publisher_listener(pub_data);
-  } else if (event_data->event_type == RMW_EVENT_SUBSCRIPTION_MATCHED &&  // NOLINT
-    event_data->entity_data != nullptr)
-  {
-    auto * sub_data = static_cast<rmw_int2dds_cpp::SubscriptionData *>(event_data->entity_data);
-    {
-      std::lock_guard<std::mutex> lock(sub_data->matched_mutex);
-      sub_data->matched_callback = callback;
-      sub_data->matched_user_data = user_data;
-      if (callback != nullptr && sub_data->datareader != nullptr) {
-        // See the publisher branch: reconstruct the pre-registration backlog.
-        Int2DdsSubscriptionMatchedStatus matched_status = {};
-        const int32_t total_count =
-          (INT2DDS_RET_OK == int2dds_datareader_get_subscription_matched_status(
-            sub_data->datareader, &matched_status)) ? matched_status.total_count : 0;
-        if (static_cast<size_t>(total_count) > sub_data->matched_total_seen) {
-          sub_data->matched_unread +=
-            static_cast<size_t>(total_count) - sub_data->matched_total_seen;
-          sub_data->matched_total_seen = static_cast<size_t>(total_count);
-        }
-      }
-      if (callback != nullptr && sub_data->matched_unread > 0) {
-        callback(user_data, sub_data->matched_unread);
-        sub_data->matched_unread = 0;
-      }
-    }
-    // Outside the lock: the refresh helper re-acquires matched_mutex itself.
-    rmw_int2dds_cpp::refresh_subscription_listener(sub_data);
-  }
-#endif  // RMW_INT2DDS_HAS_MATCHED_EVENT
-
-  // Route status events delivered by the int2dds listener (attached at entity
-  // creation) to the owning entity's callback slot, flushing the backlog.
-  if (event_data->entity_data != nullptr) {
-    if (event_data->is_publisher) {
-      auto * pub_data = static_cast<rmw_int2dds_cpp::PublisherData *>(event_data->entity_data);
-      rmw_int2dds_cpp::CallbackSlot * slot = nullptr;
-      switch (event_data->event_type) {
-        case RMW_EVENT_OFFERED_DEADLINE_MISSED:
-          slot = &pub_data->offered_deadline_missed_slot;
-          break;
-        case RMW_EVENT_OFFERED_QOS_INCOMPATIBLE:
-          slot = &pub_data->offered_incompatible_qos_slot;
-          break;
-#ifdef RMW_INT2DDS_HAS_INCOMPATIBLE_TYPE_EVENT
-        case RMW_EVENT_PUBLISHER_INCOMPATIBLE_TYPE:
-          slot = &pub_data->offered_incompatible_type_slot;
-          break;
-#endif
-        case RMW_EVENT_LIVELINESS_LOST:
-          slot = &pub_data->liveliness_lost_slot;
-          break;
-        default:
-          break;
-      }
-      if (slot != nullptr) {
-        rmw_int2dds_cpp::set_callback_slot(
-          pub_data->listener_mutex, *slot, callback, user_data);
-        // Seed the deadline backlog from the accumulated status (see subscription
-        // path below). Runs only on on_new_event registration.
-        if (event_data->event_type == RMW_EVENT_OFFERED_DEADLINE_MISSED &&
-          callback != nullptr)
-        {
-          Int2DdsOfferedDeadlineMissedStatus seed{};
-          if (int2dds_datawriter_get_offered_deadline_missed_status(
-              pub_data->datawriter, &seed) == INT2DDS_RET_OK && seed.total_count > 0)
-          {
-            callback(user_data, static_cast<size_t>(seed.total_count));
-          }
-        }
-        if (event_data->event_type == RMW_EVENT_OFFERED_QOS_INCOMPATIBLE &&
-          callback != nullptr)
-        {
-          Int2DdsOfferedIncompatibleQosStatus seed{};
-          if (int2dds_datawriter_get_offered_incompatible_qos_status(
-              pub_data->datawriter, &seed) == INT2DDS_RET_OK && seed.total_count > 0)
-          {
-            callback(user_data, static_cast<size_t>(seed.total_count));
-          }
-        }
-#ifdef RMW_INT2DDS_HAS_INCOMPATIBLE_TYPE_EVENT
-        // Type incompatibility is counted by the core at match time, which can
-        // precede the on_new_event registration. Seed the backlog from the status.
-        if (event_data->event_type == RMW_EVENT_PUBLISHER_INCOMPATIBLE_TYPE &&
-          callback != nullptr)
-        {
-          Int2DdsOfferedIncompatibleTypeStatus seed{};
-          if (int2dds_datawriter_get_offered_incompatible_type_status(
-              pub_data->datawriter, &seed) == INT2DDS_RET_OK && seed.total_count > 0)
-          {
-            callback(user_data, static_cast<size_t>(seed.total_count));
-          }
-        }
-#endif
-        rmw_int2dds_cpp::refresh_publisher_listener(pub_data);
-      }
-    } else {
-      auto * sub_data = static_cast<rmw_int2dds_cpp::SubscriptionData *>(event_data->entity_data);
-      rmw_int2dds_cpp::CallbackSlot * slot = nullptr;
-      switch (event_data->event_type) {
-        case RMW_EVENT_REQUESTED_DEADLINE_MISSED:
-          slot = &sub_data->requested_deadline_missed_slot;
-          break;
-        case RMW_EVENT_REQUESTED_QOS_INCOMPATIBLE:
-          slot = &sub_data->requested_incompatible_qos_slot;
-          break;
-#ifdef RMW_INT2DDS_HAS_INCOMPATIBLE_TYPE_EVENT
-        case RMW_EVENT_SUBSCRIPTION_INCOMPATIBLE_TYPE:
-          slot = &sub_data->requested_incompatible_type_slot;
-          break;
-#endif
-        case RMW_EVENT_MESSAGE_LOST:
-          slot = &sub_data->message_lost_slot;
-          break;
-        case RMW_EVENT_LIVELINESS_CHANGED:
-          slot = &sub_data->liveliness_changed_slot;
-          break;
-        default:
-          break;
-      }
-      if (slot != nullptr) {
-        rmw_int2dds_cpp::set_callback_slot(
-          sub_data->listener_mutex, *slot, callback, user_data);
-        // Deadline misses are counted by the core regardless of the listener mask,
-        // but the listener (and thus the slot backlog) is only attached once a
-        // callback is registered. Seed the backlog from the accumulated status so
-        // misses that occurred before registration are reported. Runs only on
-        // on_new_event registration, so the waitset/take_event path is unaffected.
-        if (event_data->event_type == RMW_EVENT_REQUESTED_DEADLINE_MISSED &&
-          callback != nullptr)
-        {
-          Int2DdsRequestedDeadlineMissedStatus seed{};
-          if (int2dds_datareader_get_requested_deadline_missed_status(
-              sub_data->datareader, &seed) == INT2DDS_RET_OK && seed.total_count > 0)
-          {
-            callback(user_data, static_cast<size_t>(seed.total_count));
-          }
-        }
-        // Same backlog seeding for requested-incompatible-qos: the event fires once
-        // at match time, which can precede the on_new_event registration.
-        if (event_data->event_type == RMW_EVENT_REQUESTED_QOS_INCOMPATIBLE &&
-          callback != nullptr)
-        {
-          Int2DdsRequestedIncompatibleQosStatus seed{};
-          if (int2dds_datareader_get_requested_incompatible_qos_status(
-              sub_data->datareader, &seed) == INT2DDS_RET_OK && seed.total_count > 0)
-          {
-            callback(user_data, static_cast<size_t>(seed.total_count));
-          }
-        }
-#ifdef RMW_INT2DDS_HAS_INCOMPATIBLE_TYPE_EVENT
-        // Same backlog seeding for requested-incompatible-type.
-        if (event_data->event_type == RMW_EVENT_SUBSCRIPTION_INCOMPATIBLE_TYPE &&
-          callback != nullptr)
-        {
-          Int2DdsRequestedIncompatibleTypeStatus seed{};
-          if (int2dds_datareader_get_requested_incompatible_type_status(
-              sub_data->datareader, &seed) == INT2DDS_RET_OK && seed.total_count > 0)
-          {
-            callback(user_data, static_cast<size_t>(seed.total_count));
-          }
-        }
-#endif
-        rmw_int2dds_cpp::refresh_subscription_listener(sub_data);
-      }
-    }
-  }
-
-  return RMW_RET_OK;
-}
+// rmw_event_set_callback and RMW_EVENT_MESSAGE_LOST are Humble additions with
+// no Foxy counterpart.
 
 bool
 rmw_event_type_is_supported(rmw_event_type_t rmw_event_type)

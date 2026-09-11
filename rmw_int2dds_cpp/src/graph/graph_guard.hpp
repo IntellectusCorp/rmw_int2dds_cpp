@@ -15,7 +15,7 @@
 #ifndef GRAPH__GRAPH_GUARD_HPP_
 #define GRAPH__GRAPH_GUARD_HPP_
 
-#include "int2dds-ffi.h"
+#include "int2dds-ffi.h"  // NOLINT(build/include)
 #include "rmw_int2dds_cpp/types.hpp"
 
 namespace rmw_int2dds_cpp

@@ -16,12 +16,12 @@
 #include <cstring>
 #include <memory>
 #include <sstream>
+#include <string>
+#include <vector>
 
 #include "rmw/rmw.h"
 #include "rmw/allocators.h"
 #include "rmw/error_handling.h"
-#include "rmw/get_network_flow_endpoints.h"
-#include "rmw/subscription_content_filter_options.h"
 #include "rmw/validate_full_topic_name.h"
 
 #include "rcutils/allocator.h"
@@ -35,11 +35,11 @@
 #include "rosidl_typesupport_introspection_cpp/field_types.hpp"
 #include "rosidl_typesupport_introspection_cpp/message_introspection.hpp"
 
-#include "int2dds-ffi.h"
+#include "int2dds-ffi.h"  // NOLINT(build/include)
 #include "rmw_int2dds_cpp/identifier.hpp"
 #include "rmw_int2dds_cpp/types.hpp"
 #include "../wait/waitset_registry.hpp"  // NOLINT(build/include)
-#include "../common/listeners.hpp"  // NOLINT(build/include_subdir)
+#include "../common/listeners.hpp"  // NOLINT(build/include)
 #include "../common/type_hash_qos.hpp"
 #include "../graph/discovery.hpp"
 #include "../graph/graph_guard.hpp"
@@ -155,14 +155,6 @@ resolve_system_default_qos(rmw_qos_profile_t qos)
     qos.liveliness = RMW_QOS_POLICY_LIVELINESS_AUTOMATIC;
   }
   return qos;
-}
-
-bool
-content_filter_enabled(const rmw_subscription_content_filter_options_t * options)
-{
-  return options != nullptr &&
-         options->filter_expression != nullptr &&
-         options->filter_expression[0] != '\0';
 }
 
 struct TopicFieldDescriptors
@@ -673,32 +665,6 @@ create_subscription_reader(
   return dds_ret;
 }
 
-rmw_ret_t
-set_content_filter_options(
-  rmw_int2dds_cpp::SubscriptionData * sub_data,
-  const rmw_subscription_content_filter_options_t * options)
-{
-  if (sub_data == nullptr || options == nullptr) {
-    return RMW_RET_INVALID_ARGUMENT;
-  }
-
-  sub_data->content_filter_expression.clear();
-  sub_data->content_filter_parameters.clear();
-
-  if (!content_filter_enabled(options)) {
-    return RMW_RET_OK;
-  }
-
-  sub_data->content_filter_expression = options->filter_expression;
-  sub_data->content_filter_parameters.reserve(options->expression_parameters.size);
-  for (size_t i = 0; i < options->expression_parameters.size; ++i) {
-    const char * value = options->expression_parameters.data[i];
-    sub_data->content_filter_parameters.emplace_back(value == nullptr ? "" : value);
-  }
-
-  return RMW_RET_OK;
-}
-
 }  // namespace
 
 extern "C"
@@ -723,16 +689,8 @@ rmw_create_subscription(
     return nullptr;
   }
 
-  // int2dds does not expose per-endpoint network flows (see
-  // rmw_subscription_get_network_flow_endpoints), so a strict requirement for
-  // unique ones cannot be honoured and must be reported as an error rather than
-  // silently ignored.
-  if (subscription_options->require_unique_network_flow_endpoints ==
-    RMW_UNIQUE_NETWORK_FLOW_ENDPOINTS_STRICTLY_REQUIRED)
-  {
-    RMW_SET_ERROR_MSG("Unique network flow endpoints are not supported by rmw_int2dds_cpp");
-    return nullptr;
-  }
+  // Foxy's rmw_subscription_options_t has no require_unique_network_flow_endpoints
+  // (Galactic+), so there is no network-flow requirement to reject here.
 
   if (!qos_policies->avoid_ros_namespace_conventions) {
     int validation_result = 0;
@@ -817,15 +775,9 @@ rmw_create_subscription(
   std::string dds_topic_name = rmw_int2dds_cpp::ros_topic_to_dds_topic(
     topic_name, qos_policies->avoid_ros_namespace_conventions);
 
-  if (subscription_options->content_filter_options != nullptr) {
-    rmw_ret_t cft_ret = set_content_filter_options(
-      sub_data, subscription_options->content_filter_options);
-    if (cft_ret != RMW_RET_OK) {
-      delete sub_data;
-      RMW_SET_ERROR_MSG("failed to store content filter options");
-      return nullptr;
-    }
-  }
+  // Content filtered topics arrived in Humble: Foxy's subscription options carry
+  // no content_filter_options, so content_filter_expression stays empty and the
+  // content-filtered reader path below is never taken on this branch.
 
   // Create DDS Topic
   Int2DdsRet dds_ret = INT2DDS_RET_ERROR;
@@ -918,7 +870,6 @@ rmw_create_subscription(
   subscription->topic_name = rcutils_strdup(topic_name, node->context->options.allocator);
   subscription->options = *subscription_options;
   subscription->can_loan_messages = false;
-  subscription->is_cft_enabled = !sub_data->content_filter_expression.empty();
 
   if (subscription->topic_name == nullptr) {
     rmw_subscription_free(subscription);
@@ -1088,155 +1039,6 @@ rmw_subscription_get_actual_qos(
 }
 
 rmw_ret_t
-rmw_subscription_set_content_filter(
-  rmw_subscription_t * subscription,
-  const rmw_subscription_content_filter_options_t * options)
-{
-  RMW_CHECK_ARGUMENT_FOR_NULL(subscription, RMW_RET_INVALID_ARGUMENT);
-  RMW_CHECK_ARGUMENT_FOR_NULL(options, RMW_RET_INVALID_ARGUMENT);
-
-  if (subscription->implementation_identifier != rmw_int2dds_cpp::implementation_identifier) {
-    RMW_SET_ERROR_MSG("subscription not from this implementation");
-    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION;
-  }
-
-  auto * sub_data = static_cast<rmw_int2dds_cpp::SubscriptionData *>(subscription->data);
-  if (sub_data == nullptr || sub_data->node_data == nullptr ||
-    sub_data->node_data->context_data == nullptr)
-  {
-    RMW_SET_ERROR_MSG("subscription data is null");
-    return RMW_RET_ERROR;
-  }
-
-  auto * context_data = sub_data->node_data->context_data;
-
-  std::string previous_expression = sub_data->content_filter_expression;
-  std::vector<std::string> previous_parameters = sub_data->content_filter_parameters;
-  const bool filter_enabled = content_filter_enabled(options);
-  const bool has_cft_reader = sub_data->content_filtered_topic != nullptr;
-
-  rmw_ret_t options_ret = set_content_filter_options(sub_data, options);
-  if (options_ret != RMW_RET_OK) {
-    return options_ret;
-  }
-
-  if (has_cft_reader && filter_enabled) {
-    std::vector<const char *> parameter_ptrs;
-    parameter_ptrs.reserve(sub_data->content_filter_parameters.size());
-    for (const auto & parameter : sub_data->content_filter_parameters) {
-      parameter_ptrs.push_back(parameter.c_str());
-    }
-
-    Int2DdsRet update_ret = INT2DDS_RET_ERROR;
-    if (!previous_expression.empty() &&
-      std::strcmp(options->filter_expression, previous_expression.c_str()) == 0)
-    {
-      update_ret = int2dds_contentfilteredtopic_set_expression_parameters(
-        sub_data->content_filtered_topic,
-        parameter_ptrs.empty() ? nullptr : parameter_ptrs.data(),
-        parameter_ptrs.size());
-    } else {
-      update_ret = int2dds_contentfilteredtopic_set_filter_expression(
-        sub_data->content_filtered_topic,
-        sub_data->content_filter_expression.c_str(),
-        parameter_ptrs.empty() ? nullptr : parameter_ptrs.data(),
-        parameter_ptrs.size());
-    }
-
-    if (update_ret == INT2DDS_RET_OK) {
-      Int2DdsRet enable_ret = int2dds_contentfilteredtopic_set_enabled(
-        sub_data->content_filtered_topic, true);
-      if (enable_ret == INT2DDS_RET_OK) {
-        subscription->is_cft_enabled = true;
-        return RMW_RET_OK;
-      }
-    }
-  }
-
-  if (has_cft_reader && !filter_enabled) {
-    Int2DdsRet disable_ret = int2dds_contentfilteredtopic_set_enabled(
-      sub_data->content_filtered_topic, false);
-    if (disable_ret == INT2DDS_RET_OK) {
-      subscription->is_cft_enabled = !sub_data->content_filter_expression.empty();
-      return RMW_RET_OK;
-    }
-  }
-
-  if (!has_cft_reader && !filter_enabled) {
-    // This subscription has no content-filtered reader, so it does not support
-    // content filtering at all. Report UNSUPPORTED consistently for every
-    // filter operation instead of silently succeeding on an empty filter.
-    subscription->is_cft_enabled = false;
-    return RMW_RET_UNSUPPORTED;
-  }
-
-  if (!has_cft_reader && filter_enabled) {
-    sub_data->content_filter_expression = previous_expression;
-    sub_data->content_filter_parameters = previous_parameters;
-    subscription->is_cft_enabled = !previous_expression.empty();
-    return RMW_RET_UNSUPPORTED;
-  }
-
-  destroy_subscription_reader_entities(context_data, sub_data);
-  Int2DdsRet dds_ret = create_subscription_reader(context_data, sub_data);
-  if (dds_ret != INT2DDS_RET_OK) {
-    sub_data->content_filter_expression = previous_expression;
-    sub_data->content_filter_parameters = previous_parameters;
-    dds_ret = create_subscription_reader(context_data, sub_data);
-    if (dds_ret != INT2DDS_RET_OK) {
-      RMW_SET_ERROR_MSG("failed to recreate DataReader after content filter update rollback");
-      return RMW_RET_ERROR;
-    }
-    subscription->is_cft_enabled = !sub_data->content_filter_expression.empty();
-    return RMW_RET_UNSUPPORTED;
-  }
-
-  subscription->is_cft_enabled = !sub_data->content_filter_expression.empty();
-  return RMW_RET_OK;
-}
-
-rmw_ret_t
-rmw_subscription_get_content_filter(
-  const rmw_subscription_t * subscription,
-  rcutils_allocator_t * allocator,
-  rmw_subscription_content_filter_options_t * options)
-{
-  RMW_CHECK_ARGUMENT_FOR_NULL(subscription, RMW_RET_INVALID_ARGUMENT);
-  RMW_CHECK_ARGUMENT_FOR_NULL(allocator, RMW_RET_INVALID_ARGUMENT);
-  RMW_CHECK_ARGUMENT_FOR_NULL(options, RMW_RET_INVALID_ARGUMENT);
-
-  if (subscription->implementation_identifier != rmw_int2dds_cpp::implementation_identifier) {
-    RMW_SET_ERROR_MSG("subscription not from this implementation");
-    return RMW_RET_INCORRECT_RMW_IMPLEMENTATION;
-  }
-
-  auto * sub_data = static_cast<rmw_int2dds_cpp::SubscriptionData *>(subscription->data);
-  if (sub_data == nullptr) {
-    RMW_SET_ERROR_MSG("subscription data is null");
-    return RMW_RET_ERROR;
-  }
-
-  if (sub_data->content_filter_expression.empty()) {
-    return RMW_RET_UNSUPPORTED;
-  }
-
-  *options = rmw_get_zero_initialized_content_filter_options();
-
-  std::vector<const char *> parameter_ptrs;
-  parameter_ptrs.reserve(sub_data->content_filter_parameters.size());
-  for (const auto & parameter : sub_data->content_filter_parameters) {
-    parameter_ptrs.push_back(parameter.c_str());
-  }
-
-  return rmw_subscription_content_filter_options_init(
-    sub_data->content_filter_expression.c_str(),
-    parameter_ptrs.size(),
-    parameter_ptrs.empty() ? nullptr : parameter_ptrs.data(),
-    allocator,
-    options);
-}
-
-rmw_ret_t
 rmw_init_subscription_allocation(
   const rosidl_message_type_support_t * type_support,
   const rosidl_runtime_c__Sequence__bound * message_bounds,
@@ -1257,36 +1059,8 @@ rmw_fini_subscription_allocation(rmw_subscription_allocation_t * allocation)
   return RMW_RET_UNSUPPORTED;
 }
 
-rmw_ret_t
-rmw_subscription_set_on_new_message_callback(
-  rmw_subscription_t * subscription,
-  rmw_event_callback_t callback,
-  const void * user_data)
-{
-  RMW_CHECK_ARGUMENT_FOR_NULL(subscription, RMW_RET_INVALID_ARGUMENT);
-  auto * sub_data = static_cast<rmw_int2dds_cpp::SubscriptionData *>(subscription->data);
-  if (sub_data == nullptr) {
-    RMW_SET_ERROR_MSG("subscription data is null");
-    return RMW_RET_ERROR;
-  }
-  rmw_int2dds_cpp::set_callback_slot(
-    sub_data->listener_mutex, sub_data->new_message_slot, callback, user_data);
-  rmw_int2dds_cpp::refresh_subscription_listener(sub_data);
-  return RMW_RET_OK;
-}
-
-rmw_ret_t
-rmw_subscription_get_network_flow_endpoints(
-  const rmw_subscription_t * subscription,
-  rcutils_allocator_t * allocator,
-  rmw_network_flow_endpoint_array_t * network_flow_endpoint_array)
-{
-  (void)subscription;
-  (void)allocator;
-  (void)network_flow_endpoint_array;
-  // Not supported by int2dds
-  RMW_SET_ERROR_MSG("rmw_subscription_get_network_flow_endpoints is not supported");
-  return RMW_RET_UNSUPPORTED;
-}
+// Not part of the Foxy rmw API: rmw_subscription_{set,get}_content_filter and
+// rmw_subscription_set_on_new_message_callback (Humble),
+// rmw_subscription_get_network_flow_endpoints (Galactic).
 
 }  // extern "C"

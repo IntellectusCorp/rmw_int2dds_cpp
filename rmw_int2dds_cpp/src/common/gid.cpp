@@ -64,7 +64,7 @@ rmw_gid_t generate_gid(uint8_t entity_type)
   static const uint32_t process_id = []() {
       std::random_device rd;
       return static_cast<uint32_t>(rd());
-    }();
+    } ();
   std::memcpy(&gid.data[4], &process_id, sizeof(process_id));
 
   // Bytes 8-11: Monotonic counter

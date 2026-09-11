@@ -26,12 +26,12 @@
 #include "rosidl_typesupport_introspection_cpp/identifier.hpp"
 #include "rosidl_typesupport_introspection_cpp/service_introspection.hpp"
 
-#include "int2dds-ffi.h"  // NOLINT(build/include_subdir): vendored FFI header
+#include "int2dds-ffi.h"  // NOLINT(build/include): vendored FFI header
 #include "rmw_int2dds_cpp/identifier.hpp"
 #include <mutex>
 #include "rmw_int2dds_cpp/types.hpp"
 #include "rmw_int2dds_cpp/cdr_serializer.hpp"
-#include "../common/take_with_info.hpp"  // NOLINT(build/include_subdir)
+#include "../common/take_with_info.hpp"  // NOLINT(build/include)
 
 // Service request/response wire format:
 // [CDR header 4 bytes] [8 bytes client key] [8 bytes sequence number] [CDR payload]
