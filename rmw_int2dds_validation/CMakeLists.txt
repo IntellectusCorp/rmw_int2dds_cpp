@@ -67,8 +67,20 @@ add_probe(qos_lifespan_pub_cpp
   validation/qos/lifespan/rclcpp/qos_lifespan_pub.cpp rclcpp std_msgs)
 
 # Content-filtered topics
-add_probe(content_filter_lifecycle_check_cpp
-  validation/cft/rclcpp/content_filter_lifecycle_check.cpp rclcpp std_msgs)
+# Content filtered topics arrived in Humble; Foxy has neither the rmw API nor
+# rclcpp::ContentFilterOptions, so the probe is built only where the rmw
+# headers provide it.
+find_file(RMW_INT2DDS_VALIDATION_CFT_HEADER
+  NAMES rmw/subscription_content_filter_options.h
+  HINTS ${rmw_INCLUDE_DIRS}
+  NO_DEFAULT_PATH)
+mark_as_advanced(RMW_INT2DDS_VALIDATION_CFT_HEADER)
+if(RMW_INT2DDS_VALIDATION_CFT_HEADER)
+  add_probe(content_filter_lifecycle_check_cpp
+    validation/cft/rclcpp/content_filter_lifecycle_check.cpp rclcpp std_msgs)
+else()
+  message(STATUS "rmw content filter API not available - skipping content_filter_lifecycle_check_cpp")
+endif()
 
 # Executor callbacks - publishes nothing, so no std_msgs here.
 add_probe(callback_executor_smoke_cpp

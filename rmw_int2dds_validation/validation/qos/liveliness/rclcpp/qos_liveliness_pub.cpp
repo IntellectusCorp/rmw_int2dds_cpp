@@ -24,12 +24,12 @@ using namespace std::chrono_literals;
 namespace
 {
 
-rclcpp::LivelinessPolicy parse_liveliness(const std::string & value)
+rmw_qos_liveliness_policy_t parse_liveliness(const std::string & value)
 {
   if (value == "manual_by_topic") {
-    return rclcpp::LivelinessPolicy::ManualByTopic;
+    return RMW_QOS_POLICY_LIVELINESS_MANUAL_BY_TOPIC;
   }
-  return rclcpp::LivelinessPolicy::Automatic;
+  return RMW_QOS_POLICY_LIVELINESS_AUTOMATIC;
 }
 
 class LivelinessPublisherCpp : public rclcpp::Node
@@ -58,8 +58,8 @@ public:
     wait_timeout_sec_(wait_timeout_sec)
   {
     rclcpp::QoS qos(rclcpp::KeepLast(10));
-    qos.reliability(rclcpp::ReliabilityPolicy::Reliable);
-    qos.durability(rclcpp::DurabilityPolicy::Volatile);
+    qos.reliability(RMW_QOS_POLICY_RELIABILITY_RELIABLE);
+    qos.durability(RMW_QOS_POLICY_DURABILITY_VOLATILE);
     qos.liveliness(parse_liveliness(liveliness));
     qos.liveliness_lease_duration(rclcpp::Duration::from_seconds(lease_sec));
 

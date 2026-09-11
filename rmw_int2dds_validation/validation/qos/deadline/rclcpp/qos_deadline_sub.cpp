@@ -46,8 +46,8 @@ public:
     require_incompatible_event_(require_incompatible_event)
   {
     rclcpp::QoS qos(rclcpp::KeepLast(10));
-    qos.reliability(rclcpp::ReliabilityPolicy::Reliable);
-    qos.durability(rclcpp::DurabilityPolicy::Volatile);
+    qos.reliability(RMW_QOS_POLICY_RELIABILITY_RELIABLE);
+    qos.durability(RMW_QOS_POLICY_DURABILITY_VOLATILE);
     qos.deadline(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(
         deadline_sec)));
 

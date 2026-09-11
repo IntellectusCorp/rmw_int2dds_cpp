@@ -14,6 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Postpones annotation evaluation so the list[...] hints below also run on
+# Python 3.8 (Ubuntu 20.04 / Foxy), where builtin generics are not subscriptable.
+from __future__ import annotations
+
 import sys
 import time
 

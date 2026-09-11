@@ -25,20 +25,20 @@ using namespace std::chrono_literals;
 namespace
 {
 
-rclcpp::DurabilityPolicy parse_durability(const std::string & value)
+rmw_qos_durability_policy_t parse_durability(const std::string & value)
 {
   if (value == "transient_local") {
-    return rclcpp::DurabilityPolicy::TransientLocal;
+    return RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
   }
-  return rclcpp::DurabilityPolicy::Volatile;
+  return RMW_QOS_POLICY_DURABILITY_VOLATILE;
 }
 
-rclcpp::ReliabilityPolicy parse_reliability(const std::string & value)
+rmw_qos_reliability_policy_t parse_reliability(const std::string & value)
 {
   if (value == "best_effort") {
-    return rclcpp::ReliabilityPolicy::BestEffort;
+    return RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT;
   }
-  return rclcpp::ReliabilityPolicy::Reliable;
+  return RMW_QOS_POLICY_RELIABILITY_RELIABLE;
 }
 
 class DurabilityPublisherCpp : public rclcpp::Node

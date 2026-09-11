@@ -24,12 +24,12 @@ using namespace std::chrono_literals;
 namespace
 {
 
-rclcpp::DurabilityPolicy parse_durability(const std::string & value)
+rmw_qos_durability_policy_t parse_durability(const std::string & value)
 {
   if (value == "volatile") {
-    return rclcpp::DurabilityPolicy::Volatile;
+    return RMW_QOS_POLICY_DURABILITY_VOLATILE;
   }
-  return rclcpp::DurabilityPolicy::TransientLocal;
+  return RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
 }
 
 class LifespanPublisherCpp : public rclcpp::Node
@@ -56,9 +56,9 @@ public:
     wait_timeout_sec_(wait_timeout_sec)
   {
     rclcpp::QoS qos(rclcpp::KeepLast(10));
-    qos.reliability(rclcpp::ReliabilityPolicy::Reliable);
+    qos.reliability(RMW_QOS_POLICY_RELIABILITY_RELIABLE);
     qos.durability(parse_durability(durability));
-    qos.liveliness(rclcpp::LivelinessPolicy::Automatic);
+    qos.liveliness(RMW_QOS_POLICY_LIVELINESS_AUTOMATIC);
     qos.lifespan(rclcpp::Duration::from_seconds(lifespan_sec));
 
     publisher_ = create_publisher<std_msgs::msg::String>(topic, qos);

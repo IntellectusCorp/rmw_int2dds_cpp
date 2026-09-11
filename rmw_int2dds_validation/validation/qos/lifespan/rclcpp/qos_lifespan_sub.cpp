@@ -26,12 +26,12 @@ using namespace std::chrono_literals;
 namespace
 {
 
-rclcpp::DurabilityPolicy parse_durability(const std::string & value)
+rmw_qos_durability_policy_t parse_durability(const std::string & value)
 {
   if (value == "volatile") {
-    return rclcpp::DurabilityPolicy::Volatile;
+    return RMW_QOS_POLICY_DURABILITY_VOLATILE;
   }
-  return rclcpp::DurabilityPolicy::TransientLocal;
+  return RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
 }
 
 class LifespanSubscriberCpp : public rclcpp::Node
@@ -52,9 +52,9 @@ public:
     require_publisher_observed_(require_publisher_observed)
   {
     rclcpp::QoS qos(rclcpp::KeepLast(10));
-    qos.reliability(rclcpp::ReliabilityPolicy::Reliable);
+    qos.reliability(RMW_QOS_POLICY_RELIABILITY_RELIABLE);
     qos.durability(parse_durability(durability));
-    qos.liveliness(rclcpp::LivelinessPolicy::Automatic);
+    qos.liveliness(RMW_QOS_POLICY_LIVELINESS_AUTOMATIC);
     subscription_ = create_subscription<std_msgs::msg::String>(
       topic,
       qos,
